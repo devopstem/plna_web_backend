@@ -1,0 +1,9 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+    # Start at level 1 for a green CI baseline; raise gradually (2+ has 200+ findings today).
+    level: 1
+    treatPhpDocTypesAsCertain: false

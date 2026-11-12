@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  laravel:
+    name: Laravel (PHP ${{ matrix.php }} · Postgres 15)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    strategy:
+      fail-fast: true
+      matrix:
+        # composer.json: php ^8.3 — CI pins current supported runtime.
+        php: ['8.4']
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d testing"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: true
+      APP_KEY: base64:2fl+KtvkdphvQyEfmA8pYtQxqGvEoQe4pYkq0zq1n2s=
+      APP_URL: http://localhost
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: testing
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      # Do NOT use "null": Laravel env() casts the string "null" to PHP null,
+      # which makes broadcasting.default empty and crashes package:discover.
+      BROADCAST_CONNECTION: log
+      FILESYSTEM_DISK: local
+      LOG_CHANNEL: stderr
+      SESSION_SECURE_COOKIE: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pgsql, redis, bcmath, intl, gd, zip, exif, pcntl
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache dir
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      # .env before composer: post-autoload-dump runs artisan package:discover.
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          php -r '
+            $env = file_get_contents(".env");
+            $map = [
+              "APP_ENV" => "testing",
+              "APP_DEBUG" => "true",
+              "APP_KEY" => "base64:2fl+KtvkdphvQyEfmA8pYtQxqGvEoQe4pYkq0zq1n2s=",
+              "DB_CONNECTION" => "pgsql",
+              "DB_HOST" => "127.0.0.1",
+              "DB_PORT" => "5432",
+              "DB_DATABASE" => "testing",
+              "DB_USERNAME" => "postgres",
+              "DB_PASSWORD" => "postgres",
+              "CACHE_STORE" => "array",
+              "SESSION_DRIVER" => "array",
+              "QUEUE_CONNECTION" => "sync",
+              "MAIL_MAILER" => "array",
+              "BROADCAST_CONNECTION" => "log",
+              "SESSION_SECURE_COOKIE" => "false",
+            ];
+            foreach ($map as $key => $value) {
+              if (preg_match("/^{$key}=.*/m", $env)) {
+                $env = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $env);
+              } else {
+                $env .= PHP_EOL."{$key}={$value}";
+              }
+            }
+            $env = preg_replace("/^#\s*(DB_HOST|DB_PORT|DB_DATABASE|DB_USERNAME|DB_PASSWORD)=/m", "$1=", $env);
+            file_put_contents(".env", $env);
+          '
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if php -r 'try { new PDO("pgsql:host=127.0.0.1;port=5432;dbname=testing", "postgres", "postgres"); exit(0);} catch (Throwable $e) { exit(1);}'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready in time" >&2
+          exit 1
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Run tests
+        run: php artisan test --compact
+
+      - name: Laravel Pint (style)
+        run: ./vendor/bin/pint --test
+
+      - name: Larastan / PHPStan
+        run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
