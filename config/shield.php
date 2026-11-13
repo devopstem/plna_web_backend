@@ -1,5 +1,19 @@
 <?php
 
+use App\Models\User;
+use OzanKurt\Shield\Http\Middleware\ShieldDashboardMiddleware;
+use OzanKurt\Shield\Models\AuthLog;
+use OzanKurt\Shield\Models\Ip;
+use OzanKurt\Shield\Models\Log;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\AbuseIpDbProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\CrowdStrikeProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\EmergingThreatsProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\MaxMindGeoIp2PremiumProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\MaxMindGeoLite2Provider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\OwaspCrsProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\ShieldRealtimeProvider;
+use OzanKurt\Shield\Services\ThreatFeed\Providers\SpamhausProvider;
+
 return [
 
     'enabled' => env('FIREWALL_ENABLED', true),
@@ -30,7 +44,7 @@ return [
         'date_format' => 'd/m/Y H:i:s',
         'middleware' => [
             'auth',
-            OzanKurt\Shield\Http\Middleware\ShieldDashboardMiddleware::class,
+            ShieldDashboardMiddleware::class,
         ],
         'user_name_field' => 'name',
         'logo_target_route_name' => null,
@@ -44,21 +58,21 @@ return [
         'max_request_data_size' => 2048,
 
         'user' => [
-            'model' => \App\Models\User::class,
+            'model' => User::class,
         ],
 
         'auth_log' => [
-            'model' => \OzanKurt\Shield\Models\AuthLog::class,
+            'model' => AuthLog::class,
             'table' => 'auth_logs',
         ],
 
         'log' => [
-            'model' => \OzanKurt\Shield\Models\Log::class,
+            'model' => Log::class,
             'table' => 'logs',
         ],
 
         'ip' => [
-            'model' => \OzanKurt\Shield\Models\Ip::class,
+            'model' => Ip::class,
             'table' => 'ips',
         ],
     ],
@@ -145,7 +159,7 @@ return [
             // Embed Customizations
             'from' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_FROM', 'Laravel Security'),
             'from_img' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_FROM_IMG', 'https://ozankurt.com/laravel-security.png'),
-            'route' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_ROUTE'), # Route name to your security dashboard
+            'route' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_ROUTE'), // Route name to your security dashboard
             'title' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_TITLE', 'Attack Detected'),
             'footer' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_FOOTER', 'Laravel Security'),
             'footer_img' => env('FIREWALL_NOTIFICATION_CHANNELS_DISCORD_FOOTER_IMG', 'https://ozankurt.com/laravel-security.png'),
@@ -167,7 +181,7 @@ return [
         'firewall.swear',
         'firewall.xss',
         'firewall.keyword',
-        //'App\Http\Middleware\YourCustomRule',
+        // 'App\Http\Middleware\YourCustomRule',
     ],
 
     'middleware' => [
@@ -545,7 +559,7 @@ return [
                 '#-moz-binding[\x00-\x20]*:#u',
 
                 // Unneeded tags
-                '#</*(applet|meta|xml|blink|link|style|script|embed|object|iframe|frame|frameset|ilayer|layer|bgsound|title|base|img)[^>]*>?#i'
+                '#</*(applet|meta|xml|blink|link|style|script|embed|object|iframe|frame|frameset|ilayer|layer|bgsound|title|base|img)[^>]*>?#i',
             ],
 
             'auto_block' => [
@@ -921,14 +935,14 @@ return [
 
     'threat_feed' => [
         'providers' => [
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\SpamhausProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\AbuseIpDbProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\OwaspCrsProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\MaxMindGeoLite2Provider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\ShieldRealtimeProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\MaxMindGeoIp2PremiumProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\EmergingThreatsProvider::class,
-            \OzanKurt\Shield\Services\ThreatFeed\Providers\CrowdStrikeProvider::class,
+            SpamhausProvider::class,
+            AbuseIpDbProvider::class,
+            OwaspCrsProvider::class,
+            MaxMindGeoLite2Provider::class,
+            ShieldRealtimeProvider::class,
+            MaxMindGeoIp2PremiumProvider::class,
+            EmergingThreatsProvider::class,
+            CrowdStrikeProvider::class,
         ],
         'sync_cron' => '0 3 * * *',
 
@@ -1019,8 +1033,8 @@ return [
         'drift' => [
             'enabled' => env('SHIELD_DRIFT_ENABLED', true),
             'paths' => [
-                'config/'       => '*.php',
-                '.env'          => null,
+                'config/' => '*.php',
+                '.env' => null,
                 'composer.json' => null,
                 'composer.lock' => null,
             ],
