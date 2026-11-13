@@ -103,11 +103,57 @@ frontend_build() {
   )
 }
 
+backup_database() {
+  local app_dir="$1"
+  local reason="${2:-manual}"
+  local env_file="${app_dir}/.env"
+  local backup_dir="${app_dir}/storage/app/backups"
+  local stamp driver db host port user password outfile
+
+  [[ -f "${env_file}" ]] || die "Нет .env для бэкапа: ${env_file}"
+
+  mkdir -p "${backup_dir}"
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  driver="$(grep -E '^DB_CONNECTION=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  db="$(grep -E '^DB_DATABASE=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  host="$(grep -E '^DB_HOST=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  port="$(grep -E '^DB_PORT=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  user="$(grep -E '^DB_USERNAME=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  password="$(grep -E '^DB_PASSWORD=' "${env_file}" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+  host="${host:-127.0.0.1}"
+  driver="${driver:-pgsql}"
+
+  case "${driver}" in
+    pgsql|postgres|postgresql)
+      command -v pg_dump >/dev/null 2>&1 || die "pg_dump не найден — установите postgresql-client"
+      [[ -n "${db}" && -n "${user}" ]] || die "DB_DATABASE / DB_USERNAME пусты в .env"
+      port="${port:-5432}"
+      outfile="${backup_dir}/plna-${reason}-${stamp}.sql"
+      log "Бэкап PostgreSQL → ${outfile}"
+      PGPASSWORD="${password}" pg_dump \
+        --host="${host}" \
+        --port="${port}" \
+        --username="${user}" \
+        --dbname="${db}" \
+        --no-owner \
+        --no-acl \
+        --format=p \
+        --file="${outfile}"
+      ;;
+    *)
+      die "Автобэкап поддерживается только для PostgreSQL (сейчас: ${driver})"
+      ;;
+  esac
+
+  ok "Бэкап готов: ${outfile}"
+}
+
 artisan_optimize() {
   local app_dir="$1"
   (
     cd "${app_dir}"
     php artisan storage:link 2>/dev/null || true
+    backup_database "${app_dir}" "install"
     php artisan migrate --force
     php artisan config:cache
     php artisan route:cache

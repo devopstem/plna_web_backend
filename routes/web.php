@@ -125,8 +125,6 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
 
     Route::get('database/sql', [DatabaseController::class, 'sql'])->name('database.sql');
     Route::post('database/sql', [DatabaseController::class, 'executeSql'])->name('database.sql.execute');
-    Route::get('database/export-sql', [DatabaseController::class, 'exportSql'])
-        ->name('database.export-sql');
     Route::get('database', [DatabaseController::class, 'index'])->name('database.index');
     Route::get('database/{table}', [DatabaseController::class, 'show'])->name('database.show');
 

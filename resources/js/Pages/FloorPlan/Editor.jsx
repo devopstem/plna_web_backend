@@ -588,13 +588,15 @@ export default function Editor({
                     error?.response?.data?.message ||
                     error?.response?.data?.errors ||
                     'Не удалось сохранить';
-                if (!silent) {
-                    fireError(
-                        typeof msg === 'string'
-                            ? msg
-                            : 'Ошибка валидации при сохранении',
-                    );
-                }
+                fireError(
+                    typeof msg === 'string'
+                        ? silent
+                            ? `Автосохранение: ${msg}`
+                            : msg
+                        : silent
+                          ? 'Автосохранение не удалось'
+                          : 'Ошибка валидации при сохранении',
+                );
             } finally {
                 setSaving(false);
             }
@@ -617,6 +619,20 @@ export default function Editor({
         }, 30000);
         return () => window.clearInterval(timer);
     }, [canEdit, dirty, invalidIds.size, save, saving]);
+
+    useEffect(() => {
+        if (!canEdit) return undefined;
+
+        const onBeforeUnload = (event) => {
+            if (!dirty) return undefined;
+            event.preventDefault();
+            event.returnValue = '';
+            return '';
+        };
+
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    }, [canEdit, dirty]);
 
     // Keyboard shortcuts
     useEffect(() => {

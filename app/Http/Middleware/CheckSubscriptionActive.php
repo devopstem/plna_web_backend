@@ -45,8 +45,16 @@ class CheckSubscriptionActive
             return $next($request);
         }
 
+        $message = 'Подписка истекла или не оформлена. Оплатите тариф, чтобы продолжить работу.';
+
+        if ($request->is('api/*') || $request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+            ], 402);
+        }
+
         return redirect()
             ->route('billing.index')
-            ->with('error', 'Подписка истекла или не оформлена. Оплатите тариф, чтобы продолжить работу.');
+            ->with('error', $message);
     }
 }

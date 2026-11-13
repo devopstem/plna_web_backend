@@ -33,7 +33,8 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // Never expose private disk (Firebase SA, dumps, etc.) via storage URLs.
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

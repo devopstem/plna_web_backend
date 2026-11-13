@@ -37,6 +37,30 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
 
+        /*
+         |----------------------------------------------------------------------
+         | Laravel Shield (WAF) — регистрация
+         |----------------------------------------------------------------------
+         | В Laravel 11+/13 нет app/Http/Kernel.php. Глобальный HTTP-стек
+         | настраивается ЗДЕСЬ, в bootstrap/app.php → withMiddleware().
+         |
+         | firewall.all — middleware group пакета ozankurt/laravel-security
+         | (XSS/SQLi/LFI/bots/…). Вешается на web + api «сверху», без изменения
+         | auth:sanctum / guest / permission / subscription.
+         | Health /up остаётся вне этих групп.
+         |
+         | В APP_ENV=testing / FIREWALL_ENABLED=false слой не вешаем — package
+         | требует lookup-таблицы; PHPUnit smoke не должен зависеть от WAF DB.
+         |----------------------------------------------------------------------
+         */
+        $firewallEnabled = filter_var(env('FIREWALL_ENABLED', true), FILTER_VALIDATE_BOOLEAN)
+            && env('APP_ENV') !== 'testing';
+
+        if ($firewallEnabled) {
+            $middleware->appendToGroup('web', 'firewall.all');
+            $middleware->appendToGroup('api', 'firewall.all');
+        }
+
         $middleware->append(SecurityHeaders::class);
 
         $middleware->web(append: [

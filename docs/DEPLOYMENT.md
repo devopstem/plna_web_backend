@@ -1,6 +1,7 @@
 # Деплой (публикация)
 
-Инструкция для выкладки из GitHub на VPS / хостинг с PHP-FPM + Nginx (или аналог).
+Инструкция для выкладки из GitHub на VPS / хостинг с PHP-FPM + Nginx (или аналог).  
+Актуальная версия продукта: **2.5** (см. `VERSION`).
 
 ## Что НЕ выкладывать из git
 
@@ -71,7 +72,18 @@ REVERB_SCHEME=https
 REVERB_INTERNAL_HOST=127.0.0.1
 REVERB_INTERNAL_PORT=8080
 REVERB_INTERNAL_SCHEME=http
+REVERB_SERVER_HOST=127.0.0.1
+
+# Laravel Shield (WAF) — см. SECURITY.md
+FIREWALL_ENABLED=true
+FIREWALL_DASHBOARD_ENABLED=false
+LS_HONEYPOT_ENABLED=true
+LS_BYPASS_IPS=OFFICE_OR_BASTION_IP
+LS_AUDIT_HMAC_SECRET=
+LS_BYPASS_KEY=
 ```
+
+`install.sh` сам проставляет `REVERB_INTERNAL_*`, bind Reverb на `127.0.0.1`, `LOG_CHANNEL=daily`.
 
 3. **Зависимости и сборка**
 
@@ -163,10 +175,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Обновление с GitHub
 
-Предпочтительно:
+Предпочтительно (`deploy.sh` делает `pg_dump` → `artisan down` → migrate → cache → `up` + health `/up`):
 
 ```bash
 sudo ./scripts/deploy.sh
+# пропуск бэкапа только осознанно:
+# sudo ./scripts/deploy.sh --no-backup
 ```
 
 Или вручную:
@@ -175,21 +189,31 @@ sudo ./scripts/deploy.sh
 git pull
 composer install --no-dev --optimize-autoloader
 npm ci && npm run build
+# бэкап перед migrate обязателен на проде
+php artisan down --retry=60
 php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
+php artisan up
 # перезапуск queue/reverb workers
+curl -fsS https://your-domain.tld/up
 ```
+
+Полный сброс БД: `CONFIRM=1 sudo ./scripts/reset.sh` (тоже с бэкапом; `--no-backup` только в крайнем случае).
 
 ## После деплоя
 
 - [ ] HTTPS и `SESSION_SECURE_COOKIE=true`
 - [ ] `APP_DEBUG=false`
-- [ ] Бэкапы PostgreSQL
-- [ ] Логин Super Admin работает
+- [ ] `FIREWALL_ENABLED=true` и заполнены `LS_*`
+- [ ] Shield seeders (lookup + WAF rules), если таблицы пустые — см. [SECURITY.md](SECURITY.md)
+- [ ] Бэкапы PostgreSQL (`storage/app/backups/` или внешний cron)
+- [ ] Reverb слушает только `127.0.0.1:8080`
+- [ ] Логин Super Admin работает (саморегистрация закрыта)
 - [ ] Экспорт в Firebase (если используется)
 - [ ] Права файлов credentials `600`
+- [ ] GitHub secret `SONAR_TOKEN` для CI (если используете SonarCloud)
 
 ## Архитектура на проде (минимум)
 

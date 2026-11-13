@@ -205,6 +205,13 @@ class FloorPlanController extends Controller implements HasMiddleware
 
     public function removeWall(Wall $wall): JsonResponse
     {
+        // Store global scopes enforce tenant / department — other-tenant walls 404.
+        $store = Store::query()->find($wall->store_id);
+
+        if (! $store) {
+            return response()->json(['message' => 'Стена не найдена.'], 404);
+        }
+
         $this->floorPlans->removeWall($wall);
 
         return response()->json([

@@ -47,6 +47,7 @@ class AuthenticatedSessionController extends Controller
 
             $request->session()->put('login.id', $user->id);
             $request->session()->put('login.remember', $remember);
+            $request->session()->put('login.id_expires_at', now()->addMinutes(10)->getTimestamp());
             $request->session()->regenerate();
 
             return redirect()->route('two-factor.login');

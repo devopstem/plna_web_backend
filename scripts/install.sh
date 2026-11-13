@@ -208,8 +208,14 @@ set_env_kv "${ENV_FILE}" "REDIS_PORT" "6379"
 set_env_kv "${ENV_FILE}" "REVERB_HOST" "${DOMAIN}"
 set_env_kv "${ENV_FILE}" "REVERB_PORT" "443"
 set_env_kv "${ENV_FILE}" "REVERB_SCHEME" "https"
-set_env_kv "${ENV_FILE}" "REVERB_SERVER_HOST" "0.0.0.0"
+# Bind Reverb to localhost only — nginx proxies /apps externally.
+set_env_kv "${ENV_FILE}" "REVERB_SERVER_HOST" "127.0.0.1"
 set_env_kv "${ENV_FILE}" "REVERB_SERVER_PORT" "8080"
+set_env_kv "${ENV_FILE}" "REVERB_INTERNAL_HOST" "127.0.0.1"
+set_env_kv "${ENV_FILE}" "REVERB_INTERNAL_PORT" "8080"
+set_env_kv "${ENV_FILE}" "REVERB_INTERNAL_SCHEME" "http"
+set_env_kv "${ENV_FILE}" "LOG_CHANNEL" "daily"
+set_env_kv "${ENV_FILE}" "LOG_LEVEL" "info"
 
 if ! grep -qE '^REVERB_APP_ID=.+' "${ENV_FILE}"; then
   set_env_kv "${ENV_FILE}" "REVERB_APP_ID" "$(rand_secret | head -c 12)"

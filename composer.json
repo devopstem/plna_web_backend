@@ -22,8 +22,10 @@
         "laravel/reverb": "^1.11",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "ozankurt/laravel-security": "^2.2.0",
         "pragmarx/google2fa": "^9.1",
         "predis/predis": "^3.5",
+        "pushery/sanctum-hardening-for-laravel": "^0.4.1",
         "spatie/laravel-activitylog": "^5.1",
         "spatie/laravel-permission": "^8.3",
         "tightenco/ziggy": "^2.0"
@@ -43,7 +45,10 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "classmap": [
+            "vendor/ozankurt/laravel-security/database/seeders"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
@@ -59,6 +64,7 @@
             "npm install --ignore-scripts",
             "npm run build"
         ],
+        "audit": "composer audit",
         "test": [
             "@php artisan test --compact"
         ],

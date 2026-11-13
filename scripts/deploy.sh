@@ -20,6 +20,7 @@ DO_PULL=1
 DO_BUILD=1
 DO_MIGRATE=1
 DO_RESTART=1
+DO_BACKUP=1
 
 usage() {
   cat <<'EOF'
@@ -29,6 +30,7 @@ Options:
   --no-pull      не делать git pull
   --no-build     пропустить npm ci && npm run build
   --no-migrate   пропустить php artisan migrate --force
+  --no-backup    не делать pg_dump перед migrate
   --no-restart   не перезапускать queue/reverb/nginx/php-fpm
   -h, --help     справка
 
@@ -43,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --no-pull) DO_PULL=0; shift ;;
     --no-build) DO_BUILD=0; shift ;;
     --no-migrate) DO_MIGRATE=0; shift ;;
+    --no-backup) DO_BACKUP=0; shift ;;
     --no-restart) DO_RESTART=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Неизвестный аргумент: $1 (см. --help)" ;;
@@ -79,15 +82,23 @@ fi
 app_permissions "${APP_DIR}" "${WEB_USER}"
 
 if [[ "${DO_MIGRATE}" == "1" ]]; then
-  log "Migrate + cache"
+  if [[ "${DO_BACKUP}" == "1" ]]; then
+    backup_database "${APP_DIR}" "pre-migrate"
+  else
+    warn "Пропуск бэкапа перед migrate"
+  fi
+
+  log "Maintenance → migrate → cache → up"
   (
     cd "${APP_DIR}"
+    php artisan down --retry=60 --secret=plna-deploy || true
     php artisan migrate --force
     php artisan config:cache
     php artisan route:cache
     php artisan view:cache
     php artisan event:cache 2>/dev/null || true
     php artisan storage:link 2>/dev/null || true
+    php artisan up
   )
 else
   log "Только cache (без migrate)"
@@ -105,5 +116,15 @@ if [[ "${DO_RESTART}" == "1" ]]; then
   ok "php-fpm / nginx / supervisor обновлены"
 fi
 
+APP_URL="$(grep -E '^APP_URL=' "${APP_DIR}/.env" | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+if [[ -n "${APP_URL}" ]]; then
+  log "Health-check ${APP_URL}/up"
+  if curl -fsS --max-time 15 "${APP_URL}/up" >/dev/null; then
+    ok "Health OK: ${APP_URL}/up"
+  else
+    warn "Health-check не прошёл — проверь nginx/php-fpm вручную"
+  fi
+fi
+
 ok "Deploy завершён: $(php -r "echo date('c');")"
-echo "Проверь: supervisorctl status && curl -I https://\$(grep ^APP_URL= .env | cut -d= -f2 | sed 's|https\\?://||')"
+echo "Проверь: supervisorctl status && curl -I ${APP_URL:-https://example.com}"

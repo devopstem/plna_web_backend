@@ -11,7 +11,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
     ->name('api.v1.')
-    ->middleware(['auth:sanctum', 'user.active', 'tenant.active'])
+    ->middleware([
+        'auth:sanctum',
+        'throttle:api',
+        'user.active',
+        'tenant.active',
+        'subscription.active',
+    ])
     ->group(function (): void {
         Route::apiResource('stores', StoreController::class);
         Route::apiResource('departments', DepartmentController::class);

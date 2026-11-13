@@ -4,11 +4,13 @@
 Файл маршрутов: `routes/api.php`  
 Имена маршрутов: `api.v1.*`
 
-## Аутентификация
+## Аутентификация и middleware
 
 - Laravel **Sanctum** (`auth:sanctum`)
-- Дополнительно: `user.active`, `tenant.active`
+- Дополнительно (паритет с web): `throttle:api`, `user.active`, `tenant.active`, `subscription.active`
+- Без активной подписки API отвечает **402** JSON (не HTML-редирект на биллинг)
 - Для SPA-cookie сценариев укажите `SANCTUM_STATEFUL_DOMAINS` в `.env`
+- С 2.5: Sanctum hardening (`pushery/sanctum-hardening-for-laravel`) — лимиты на minting/throttle токенов
 
 Получение токена — через стандартный поток Sanctum / login вашего клиента (session cookie или personal access token, в зависимости от интеграции).
 

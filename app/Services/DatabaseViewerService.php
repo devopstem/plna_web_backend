@@ -66,6 +66,10 @@ final class DatabaseViewerService
         'sessions',
     ];
 
+    private const MAX_SQL_ROWS = 500;
+
+    private const STATEMENT_TIMEOUT_MS = 5000;
+
     /**
      * @var list<string>
      */
@@ -86,6 +90,49 @@ final class DatabaseViewerService
         'EXEC',
         'EXECUTE',
         'INTO',
+        'DO',
+        'SET',
+        'RESET',
+        'LISTEN',
+        'NOTIFY',
+        'LOAD',
+        'VACUUM',
+        'ANALYZE',
+        'REINDEX',
+        'CLUSTER',
+        'COMMENT',
+        'SECURITY',
+        'OWNER',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    private const FORBIDDEN_SQL_FUNCTIONS = [
+        'pg_read_file',
+        'pg_read_binary_file',
+        'pg_ls_dir',
+        'pg_stat_file',
+        'pg_sleep',
+        'pg_terminate_backend',
+        'pg_cancel_backend',
+        'pg_reload_conf',
+        'pg_rotate_logfile',
+        'lo_import',
+        'lo_export',
+        'lo_get',
+        'lo_put',
+        'lo_from_bytea',
+        'dblink',
+        'dblink_exec',
+        'dblink_connect',
+        'dblink_connect_u',
+        'current_setting',
+        'set_config',
+        'pg_get_file',
+        'pg_file_write',
+        'pg_file_rename',
+        'pg_file_unlink',
     ];
 
     /**
@@ -171,10 +218,18 @@ final class DatabaseViewerService
     {
         $normalized = $this->normalizeSql($sql);
         $this->assertSelectOnly($normalized);
+        $this->assertNoDangerousFunctions($normalized);
         $this->assertReferencedTablesAllowed($normalized);
+        $limited = $this->enforceRowLimit($normalized);
 
         try {
-            $rows = DB::select($normalized);
+            $rows = DB::transaction(function () use ($limited): array {
+                if (DB::connection()->getDriverName() === 'pgsql') {
+                    DB::statement('SET LOCAL statement_timeout = '.self::STATEMENT_TIMEOUT_MS);
+                }
+
+                return DB::select($limited);
+            });
         } catch (\Throwable $exception) {
             throw new RuntimeException('Ошибка выполнения запроса: '.$exception->getMessage(), 0, $exception);
         }
@@ -370,6 +425,23 @@ final class DatabaseViewerService
         }
     }
 
+    private function assertNoDangerousFunctions(string $sql): void
+    {
+        if (preg_match('/\b(pg_catalog|information_schema|pg_temp)\b/i', $sql)) {
+            throw new InvalidArgumentException('Обращение к системным схемам запрещено.');
+        }
+
+        if (preg_match('/\bpg_[a-z0-9_]+\b/i', $sql)) {
+            throw new InvalidArgumentException('Вызов pg_* функций и отношений запрещён.');
+        }
+
+        foreach (self::FORBIDDEN_SQL_FUNCTIONS as $function) {
+            if (preg_match('/\b'.preg_quote($function, '/').'\s*\(/i', $sql)) {
+                throw new InvalidArgumentException('Запрос содержит запрещённую функцию: '.$function.'.');
+            }
+        }
+    }
+
     private function assertReferencedTablesAllowed(string $sql): void
     {
         preg_match_all(
@@ -378,14 +450,48 @@ final class DatabaseViewerService
             $matches,
         );
 
-        $references = array_filter(array_merge($matches[1], $matches[2], $matches[3]));
+        $references = array_values(array_filter(array_merge($matches[1], $matches[2], $matches[3])));
+
+        if ($references === []) {
+            throw new InvalidArgumentException(
+                'SELECT должен ссылаться на таблицу из белого списка (нужен FROM).',
+            );
+        }
 
         foreach ($references as $reference) {
             $table = str_contains($reference, '.')
                 ? (string) str($reference)->afterLast('.')
                 : $reference;
 
-            $this->assertTableAllowed(strtolower($table));
+            $normalizedTable = strtolower($table);
+
+            if (str_starts_with($normalizedTable, 'pg_')) {
+                throw new InvalidArgumentException('Доступ к системным таблицам pg_* запрещён.');
+            }
+
+            $this->assertTableAllowed($normalizedTable);
         }
+    }
+
+    private function enforceRowLimit(string $sql): string
+    {
+        $withoutTrailingSemicolon = rtrim($sql, " \t\n\r\0\x0B;");
+
+        if (preg_match('/\bLIMIT\s+(\d+)\b/i', $withoutTrailingSemicolon, $matches)) {
+            $limit = (int) $matches[1];
+
+            if ($limit > self::MAX_SQL_ROWS) {
+                return (string) preg_replace(
+                    '/\bLIMIT\s+\d+\b/i',
+                    'LIMIT '.self::MAX_SQL_ROWS,
+                    $withoutTrailingSemicolon,
+                    1,
+                );
+            }
+
+            return $withoutTrailingSemicolon;
+        }
+
+        return $withoutTrailingSemicolon.' LIMIT '.self::MAX_SQL_ROWS;
     }
 }

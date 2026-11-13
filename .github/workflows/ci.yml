@@ -14,7 +14,7 @@ jobs:
   laravel:
     name: Laravel (PHP ${{ matrix.php }} · Postgres 15)
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
 
     strategy:
       fail-fast: true
@@ -58,18 +58,34 @@ jobs:
       FILESYSTEM_DISK: local
       LOG_CHANNEL: stderr
       SESSION_SECURE_COOKIE: false
+      # WAF off in CI tests (PHPUnit); enable in production via .env.
+      FIREWALL_ENABLED: false
+      FIREWALL_DASHBOARD_ENABLED: false
+      LS_HONEYPOT_ENABLED: false
+      LS_BYPASS_IPS: ""
+      LS_AUDIT_HMAC_SECRET: ci-test-hmac-secret-not-for-production-use-32b
+      LS_BYPASS_KEY: ci-test-bypass-key-not-for-production
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history for SonarCloud blame / new code detection.
+          fetch-depth: 0
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: mbstring, pdo, pgsql, redis, bcmath, intl, gd, zip, exif, pcntl
-          coverage: none
+          coverage: pcov
           tools: composer:v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
       - name: Get Composer cache dir
         id: composer-cache
@@ -105,6 +121,12 @@ jobs:
               "MAIL_MAILER" => "array",
               "BROADCAST_CONNECTION" => "log",
               "SESSION_SECURE_COOKIE" => "false",
+              "FIREWALL_ENABLED" => "false",
+              "FIREWALL_DASHBOARD_ENABLED" => "false",
+              "LS_HONEYPOT_ENABLED" => "false",
+              "LS_BYPASS_IPS" => "",
+              "LS_AUDIT_HMAC_SECRET" => "ci-test-hmac-secret-not-for-production-use-32b",
+              "LS_BYPASS_KEY" => "ci-test-bypass-key-not-for-production",
             ];
             foreach ($map as $key => $value) {
               if (preg_match("/^{$key}=.*/m", $env)) {
@@ -120,6 +142,15 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Composer audit (CVE)
+        run: composer audit --no-interaction
+
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+
       - name: Wait for PostgreSQL
         run: |
           for i in $(seq 1 30); do
@@ -134,11 +165,19 @@ jobs:
       - name: Run migrations
         run: php artisan migrate --force
 
-      - name: Run tests
-        run: php artisan test --compact
+      - name: Run tests (with coverage)
+        run: |
+          mkdir -p coverage
+          php artisan test --compact --coverage-clover=coverage/clover.xml
 
       - name: Laravel Pint (style)
         run: ./vendor/bin/pint --test
 
       - name: Larastan / PHPStan
         run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io

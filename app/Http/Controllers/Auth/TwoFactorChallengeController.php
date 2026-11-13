@@ -24,7 +24,7 @@ class TwoFactorChallengeController extends Controller
 
     public function create(Request $request): Response|RedirectResponse
     {
-        if (! $request->session()->has('login.id')) {
+        if (! $this->pendingLoginIsValid($request)) {
             return redirect()->route('login');
         }
 
@@ -39,16 +39,16 @@ class TwoFactorChallengeController extends Controller
             'code.required' => 'Введите код из приложения.',
         ]);
 
-        $userId = $request->session()->get('login.id');
-
-        if (! $userId) {
-            return redirect()->route('login');
+        if (! $this->pendingLoginIsValid($request)) {
+            return redirect()->route('login')
+                ->with('status', 'Сессия двухфакторной проверки истекла. Войдите снова.');
         }
 
+        $userId = $request->session()->get('login.id');
         $user = User::query()->find($userId);
 
         if (! $user || ! $this->twoFactor->isEnabled($user)) {
-            $request->session()->forget(['login.id', 'login.remember']);
+            $this->forgetPendingLogin($request);
 
             return redirect()->route('login');
         }
@@ -60,7 +60,7 @@ class TwoFactorChallengeController extends Controller
         }
 
         Auth::login($user, (bool) $request->session()->pull('login.remember', false));
-        $request->session()->forget('login.id');
+        $this->forgetPendingLogin($request);
         $request->session()->regenerate();
 
         $user->forceFill(['last_login_at' => now()])->save();
@@ -68,5 +68,27 @@ class TwoFactorChallengeController extends Controller
         $this->authActivity->startSession($request, $user);
 
         return redirect()->route('dashboard');
+    }
+
+    private function pendingLoginIsValid(Request $request): bool
+    {
+        if (! $request->session()->has('login.id')) {
+            return false;
+        }
+
+        $expiresAt = (int) $request->session()->get('login.id_expires_at', 0);
+
+        if ($expiresAt <= 0 || now()->getTimestamp() > $expiresAt) {
+            $this->forgetPendingLogin($request);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function forgetPendingLogin(Request $request): void
+    {
+        $request->session()->forget(['login.id', 'login.remember', 'login.id_expires_at']);
     }
 }

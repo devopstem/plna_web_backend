@@ -36,5 +36,8 @@
         <env name="FILESYSTEM_DISK" value="local"/>
         <env name="LOG_CHANNEL" value="stderr"/>
         <env name="SESSION_SECURE_COOKIE" value="false"/>
+        <env name="FIREWALL_ENABLED" value="false"/>
+        <env name="FIREWALL_DASHBOARD_ENABLED" value="false"/>
+        <env name="LS_HONEYPOT_ENABLED" value="false"/>
     </php>
 </phpunit>

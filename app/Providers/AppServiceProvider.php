@@ -18,6 +18,9 @@ use App\Observers\ProductObserver;
 use App\Observers\ShelfObserver;
 use App\Observers\StandObserver;
 use App\Observers\StoreObserver;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 
@@ -30,6 +33,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->configureRateLimiting();
+
         Vite::prefetch(concurrency: 3);
 
         Store::observe(StoreObserver::class);
@@ -39,5 +44,18 @@ class AppServiceProvider extends ServiceProvider
         Stand::observe(StandObserver::class);
         Placement::observe(PlacementObserver::class);
         Product::observe(ProductObserver::class);
+    }
+
+    private function configureRateLimiting(): void
+    {
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('two-factor', function (Request $request) {
+            $loginId = $request->session()->get('login.id');
+
+            return Limit::perMinute(5)->by((string) ($loginId ?: $request->ip()));
+        });
     }
 }

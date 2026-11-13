@@ -14,7 +14,7 @@ export default defineConfig({
         tailwindcss(),
         VitePWA({
             registerType: 'autoUpdate',
-            injectRegister: false,
+            injectRegister: 'auto',
             includeAssets: ['images/logo.svg'],
             manifest: {
                 name: 'PLNA Web Backend',

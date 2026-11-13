@@ -464,7 +464,7 @@ export default function AdminLayout({ header, children, flush = false }) {
                     />
                     <div className="shrink-0 border-t border-white/5 px-4 py-3">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                            V 2.4 · MIT
+                            V 2.5 · MIT
                         </p>
                         <p className="mt-0.5 truncate text-xs text-slate-400">
                             © DevOpsTem

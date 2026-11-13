@@ -6,6 +6,7 @@
 # Пример:
 #   CONFIRM=1 sudo ./scripts/reset.sh
 #   CONFIRM=1 sudo ./scripts/reset.sh --no-pull
+#   CONFIRM=1 sudo ./scripts/reset.sh --no-backup
 #
 set -euo pipefail
 
@@ -16,6 +17,7 @@ source "${SCRIPT_DIR}/lib.sh"
 APP_DIR="${APP_DIR:-${PLNA_ROOT}}"
 WEB_USER="${WEB_USER:-www-data}"
 DO_PULL=1
+DO_BACKUP=1
 
 usage() {
   cat <<'EOF'
@@ -24,8 +26,9 @@ Usage: CONFIRM=1 sudo ./scripts/reset.sh [options]
 Удаляет ВСЕ данные в PostgreSQL и заново накатывает миграции + DatabaseSeeder.
 
 Options:
-  --no-pull    не делать git pull перед сбросом
-  -h, --help   справка
+  --no-pull      не делать git pull перед сбросом
+  --no-backup    пропустить обязательный pg_dump (опасно)
+  -h, --help     справка
 
 Env:
   CONFIRM=1    обязательно — без этого скрипт не запустится
@@ -42,6 +45,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-pull) DO_PULL=0; shift ;;
+    --no-backup) DO_BACKUP=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Неизвестный аргумент: $1 (см. --help)" ;;
   esac
@@ -63,6 +67,12 @@ fi
 
 log "Composer (на случай новых сидеров)"
 composer_install_prod "${APP_DIR}"
+
+if [[ "${DO_BACKUP}" == "1" ]]; then
+  backup_database "${APP_DIR}" "pre-reset"
+else
+  warn "Бэкап перед reset пропущен (--no-backup)"
+fi
 
 log "migrate:fresh --seed"
 php artisan migrate:fresh --seed --force
