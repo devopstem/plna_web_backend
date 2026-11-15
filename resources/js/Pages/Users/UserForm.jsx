@@ -16,11 +16,6 @@ const TIMEZONE_OPTIONS = [
     { value: 'Europe/Moscow', label: 'Europe/Moscow' },
 ];
 
-const LOCALE_OPTIONS = [
-    { value: 'ru', label: 'Русский' },
-    { value: 'en', label: 'English' },
-];
-
 function FieldError({ message }) {
     if (!message) {
         return null;
@@ -60,7 +55,8 @@ export function buildUserFormData(user = null, defaults = {}) {
         department_id: user?.department_id ?? '',
         is_active: user?.is_active ?? defaults.is_active ?? true,
         timezone: user?.timezone ?? defaults.timezone ?? 'Europe/Minsk',
-        locale: user?.locale ?? defaults.locale ?? 'ru',
+        // UI i18n not implemented — always persist Russian.
+        locale: 'ru',
     };
 }
 
@@ -361,6 +357,10 @@ export default function UserForm({
                                     </option>
                                 ))}
                             </select>
+                            <p className="mt-1 text-xs text-slate-400">
+                                Заведующий видит только свой отдел и магазин —
+                                без отдела доступ будет пустым.
+                            </p>
                             <FieldError message={err('department_id')} />
                         </div>
                     )}
@@ -398,31 +398,6 @@ export default function UserForm({
                             ))}
                         </select>
                         <FieldError message={err('timezone')} />
-                    </div>
-
-                    <div>
-                        <label
-                            htmlFor="locale"
-                            className="block text-sm font-medium text-slate-200"
-                        >
-                            Язык
-                        </label>
-                        <select
-                            id="locale"
-                            value={data.locale || 'ru'}
-                            onChange={(e) => setData('locale', e.target.value)}
-                            className={inputClass(err('locale'))}
-                        >
-                            {LOCALE_OPTIONS.map((option) => (
-                                <option
-                                    key={option.value}
-                                    value={option.value}
-                                >
-                                    {option.label}
-                                </option>
-                            ))}
-                        </select>
-                        <FieldError message={err('locale')} />
                     </div>
 
                     <div className="sm:col-span-2">

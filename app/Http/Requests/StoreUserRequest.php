@@ -48,7 +48,7 @@ class StoreUserRequest extends FormRequest
                 'exists:departments,id',
             ],
             'timezone' => ['nullable', 'string', 'max:50', 'timezone'],
-            'locale' => ['nullable', 'string', Rule::in(['ru', 'en'])],
+            'locale' => ['nullable', 'string', Rule::in(['ru'])],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }
@@ -75,7 +75,8 @@ class StoreUserRequest extends FormRequest
         $this->merge([
             'is_active' => filter_var($this->input('is_active', true), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true,
             'timezone' => $this->input('timezone') ?: 'Europe/Minsk',
-            'locale' => $this->input('locale') ?: 'ru',
+            // UI i18n not shipped — keep a single locale.
+            'locale' => 'ru',
         ]);
     }
 

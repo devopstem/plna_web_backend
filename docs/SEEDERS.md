@@ -11,7 +11,7 @@ php artisan db:seed --force
 
 | Сидер | Что делает | Нужно в .env |
 |-------|------------|--------------|
-| **RoleSeeder** | Роли и права Spatie (Super Admin, Заместитель, …) | — |
+| **RolesAndPermissionsSeeder** | Роли и права Spatie (Super Admin, Заместитель, …); `RoleSeeder` — алиас | — |
 | **SuperAdminSeeder** | Пользователь Super Admin | `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD` (см. `config/services.php`) |
 | **PlanSeeder** | Тарифы Free/Basic/Pro/Enterprise, банковский счёт, подписки для существующих арендаторов | — |
 | **LegalDocumentSeeder** | Оферта и политика конфиденциальности (если ещё нет) | — |

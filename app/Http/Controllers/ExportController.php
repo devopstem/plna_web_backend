@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresStoreAccess;
 use App\Jobs\SyncStoreToFirebase;
 use App\Models\Store;
 use App\Models\SyncLog;
@@ -26,6 +27,8 @@ use Throwable;
 
 class ExportController extends Controller implements HasMiddleware
 {
+    use EnsuresStoreAccess;
+
     /**
      * @return list<Middleware>
      */
@@ -336,7 +339,10 @@ class ExportController extends Controller implements HasMiddleware
 
     private function findAuthorizedStore(string $storeId): Store
     {
-        return Store::query()->findOrFail($storeId);
+        $store = $this->findAccessibleStore($storeId);
+        $this->assertCanAccessStore($store);
+
+        return $store;
     }
 
     private function resolveCatalogTenantId(Request $request): ?string

@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
         $this->command?->info('Базовые сидеры (роли, админ, тарифы, legal, бот). Демо-магазин — отдельно: StoreCatalogSeeder.');
 
         $this->call([
-            RoleSeeder::class,
+            RolesAndPermissionsSeeder::class,
             SuperAdminSeeder::class,
             PlanSeeder::class,
             LegalDocumentSeeder::class,

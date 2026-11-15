@@ -7,32 +7,22 @@ namespace App\Http\Controllers;
 use App\Http\Requests\TenantRequest;
 use App\Models\Tenant;
 use App\Services\TenantService;
-use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controllers\HasMiddleware;
-use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class TenantController extends Controller implements HasMiddleware
+class TenantController extends Controller
 {
     public function __construct(
         private readonly TenantService $tenants,
     ) {}
 
-    /**
-     * @return list<Middleware>
-     */
-    public static function middleware(): array
-    {
-        return [
-            new Middleware('permission:'.Permissions::MANAGE_TENANTS),
-        ];
-    }
-
     public function index(Request $request): Response
     {
+        $this->assertPlatformAdmin();
+
         $status = $request->string('status')->toString();
         $search = $request->string('search')->toString();
 
@@ -55,6 +45,8 @@ class TenantController extends Controller implements HasMiddleware
 
     public function create(): Response
     {
+        $this->assertPlatformAdmin();
+
         return Inertia::render('Tenants/Create', [
             'plans' => $this->tenants->planOptions(),
         ]);
@@ -62,6 +54,8 @@ class TenantController extends Controller implements HasMiddleware
 
     public function store(TenantRequest $request): RedirectResponse
     {
+        $this->assertPlatformAdmin();
+
         $tenant = $this->tenants->create($request->tenantAttributes());
 
         return redirect()
@@ -72,6 +66,7 @@ class TenantController extends Controller implements HasMiddleware
     public function show(string $tenant): Response
     {
         $model = Tenant::query()->findOrFail($tenant);
+        $this->assertCanAccessTenant($model);
 
         return Inertia::render('Tenants/Show', [
             'tenant' => $this->tenants->toDetails($model),
@@ -81,6 +76,7 @@ class TenantController extends Controller implements HasMiddleware
     public function edit(string $tenant): Response
     {
         $model = Tenant::query()->findOrFail($tenant);
+        $this->assertCanAccessTenant($model);
 
         return Inertia::render('Tenants/Edit', [
             'tenant' => $this->tenants->toSummary($model),
@@ -91,7 +87,18 @@ class TenantController extends Controller implements HasMiddleware
     public function update(TenantRequest $request, string $tenant): RedirectResponse
     {
         $model = Tenant::query()->findOrFail($tenant);
-        $this->tenants->update($model, $request->tenantAttributes());
+        $this->assertCanAccessTenant($model);
+
+        // Tenant Admin may edit own tenant profile, but not plan/activation/quotas.
+        if (! Auth::user()?->isSuperAdmin()) {
+            $attrs = $request->tenantAttributes();
+            $this->tenants->update($model, [
+                'name' => $attrs['name'],
+                'domain' => $attrs['domain'],
+            ]);
+        } else {
+            $this->tenants->update($model, $request->tenantAttributes());
+        }
 
         return redirect()
             ->route('tenants.show', $model->id)
@@ -100,12 +107,36 @@ class TenantController extends Controller implements HasMiddleware
 
     public function toggleActive(string $tenant): RedirectResponse
     {
+        $this->assertPlatformAdmin();
+
         $model = Tenant::query()->findOrFail($tenant);
         $this->tenants->toggleActive($model);
 
         return back()->with(
             'success',
             $model->is_active ? 'Арендатор разблокирован.' : 'Арендатор заблокирован.',
+        );
+    }
+
+    private function assertPlatformAdmin(): void
+    {
+        abort_unless(Auth::user()?->isSuperAdmin() === true, 403, 'Только Super Admin.');
+    }
+
+    private function assertCanAccessTenant(Tenant $tenant): void
+    {
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin()) {
+            return;
+        }
+
+        abort_unless(
+            $user?->isTenantAdmin() === true
+                && $user->tenant_id !== null
+                && (string) $user->tenant_id === (string) $tenant->id,
+            403,
+            'Нет доступа к этому арендатору.',
         );
     }
 }

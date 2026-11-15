@@ -32,7 +32,6 @@ class UpdateSettingsProfileRequest extends FormRequest
             ],
             'phone' => ['nullable', 'string', 'max:20'],
             'timezone' => ['required', 'string', 'max:50', 'timezone'],
-            'locale' => ['required', 'string', Rule::in(['ru', 'en'])],
         ];
     }
 
@@ -47,7 +46,6 @@ class UpdateSettingsProfileRequest extends FormRequest
             'email.email' => 'Некорректный email.',
             'email.unique' => 'Этот email уже занят.',
             'timezone.required' => 'Выберите часовой пояс.',
-            'locale.required' => 'Выберите язык.',
         ];
     }
 }

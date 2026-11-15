@@ -101,7 +101,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Network Manager — роль «Заместитель» (исторически Network Manager).
+     * Tenant Admin — роль «Заместитель» (исторически Network Manager).
      */
     public function isNetworkManager(): bool
     {
@@ -109,14 +109,32 @@ class User extends Authenticatable
             || $this->hasRole('Network Manager', 'web');
     }
 
+    public function isTenantAdmin(): bool
+    {
+        return $this->isNetworkManager();
+    }
+
     public function canSetupFloorPlanMap(): bool
     {
-        return $this->isSuperAdmin() || $this->isNetworkManager();
+        // Tenant Admin + Store/Dept Manager may configure their hall map.
+        return $this->isSuperAdmin()
+            || $this->isNetworkManager()
+            || $this->isDepartmentHead();
     }
 
     public function isDepartmentHead(): bool
     {
         return $this->hasRole(Permissions::ROLE_HEAD, 'web');
+    }
+
+    public function isMerchandiser(): bool
+    {
+        return $this->hasRole(Permissions::ROLE_MERCHANDISER, 'web');
+    }
+
+    public function isIntegrator(): bool
+    {
+        return $this->hasRole(Permissions::ROLE_PROGRAMMER, 'web');
     }
 
     public function restrictsToOwnDepartment(): bool

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\AuthorizesResourcePermissions;
+use App\Http\Controllers\Concerns\EnsuresStoreAccess;
 use App\Http\Requests\StoreRequest;
 use App\Models\Store;
 use App\Models\Tenant;
@@ -25,6 +26,7 @@ use Inertia\Response;
 class StoreController extends Controller implements HasMiddleware
 {
     use AuthorizesResourcePermissions;
+    use EnsuresStoreAccess;
 
     /**
      * @return list<Middleware>
@@ -155,7 +157,8 @@ class StoreController extends Controller implements HasMiddleware
 
     public function edit(string $store): Response
     {
-        $model = Store::query()->findOrFail($store);
+        $model = $this->findAccessibleStore($store);
+        $this->assertCanModifyStore($model);
 
         return Inertia::render('Stores/Edit', [
             'store' => $this->transformStore($model, detailed: true),
@@ -165,7 +168,8 @@ class StoreController extends Controller implements HasMiddleware
 
     public function update(StoreRequest $request, string $store): RedirectResponse
     {
-        $model = Store::query()->findOrFail($store);
+        $model = $this->findAccessibleStore($store);
+        $this->assertCanModifyStore($model);
         $model->update($request->storeAttributes());
 
         return redirect()
@@ -175,7 +179,8 @@ class StoreController extends Controller implements HasMiddleware
 
     public function destroy(string $store): RedirectResponse
     {
-        $model = Store::query()->findOrFail($store);
+        $model = $this->findAccessibleStore($store);
+        $this->assertCanModifyStore($model);
         $model->delete();
 
         return redirect()

@@ -67,6 +67,10 @@ class TwoFactorChallengeController extends Controller
         $this->authActivity->logLogin($request, $user, 'success');
         $this->authActivity->startSession($request, $user);
 
+        if (! $user->isSuperAdmin() && ($user->isMerchandiser() || $user->isIntegrator())) {
+            return redirect()->route('merchandiser.mobile-only');
+        }
+
         return redirect()->route('dashboard');
     }
 

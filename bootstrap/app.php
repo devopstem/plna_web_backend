@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CheckSubscriptionActive;
 use App\Http\Middleware\CheckUserActive;
+use App\Http\Middleware\EnsureApiOnlyRole;
 use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SecurityHeaders;
@@ -32,6 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'user.active' => CheckUserActive::class,
             'tenant.active' => EnsureTenantIsActive::class,
             'subscription.active' => CheckSubscriptionActive::class,
+            'merchandiser.mobile' => EnsureApiOnlyRole::class,
+            'api.only' => EnsureApiOnlyRole::class,
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,

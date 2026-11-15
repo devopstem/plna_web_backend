@@ -406,13 +406,6 @@ export default function Show({
                                 <InfoRow label="Часовой пояс">
                                     {user.timezone || '—'}
                                 </InfoRow>
-                                <InfoRow label="Язык">
-                                    {user.locale === 'en'
-                                        ? 'English'
-                                        : user.locale === 'ru'
-                                          ? 'Русский'
-                                          : user.locale || '—'}
-                                </InfoRow>
                                 <InfoRow label="Последний вход">
                                     {formatDate(user.last_login_at)}
                                 </InfoRow>

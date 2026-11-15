@@ -14,7 +14,20 @@ class TenantRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can(Permissions::MANAGE_TENANTS) ?? false;
+        $user = $this->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->isSuperAdmin() || $user->can(Permissions::MANAGE_TENANTS)) {
+            return true;
+        }
+
+        // Tenant Admin may update own tenant (route + controller enforce ownership).
+        return $this->isMethod('PUT') || $this->isMethod('PATCH')
+            ? $user->isTenantAdmin()
+            : false;
     }
 
     /**

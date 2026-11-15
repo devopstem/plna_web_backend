@@ -1,7 +1,7 @@
 # Деплой (публикация)
 
 Инструкция для выкладки из GitHub на VPS / хостинг с PHP-FPM + Nginx (или аналог).  
-Актуальная версия продукта: **2.5** (см. `VERSION`).
+Актуальная версия продукта: **2.6** (см. `VERSION`).
 
 ## Что НЕ выкладывать из git
 
@@ -93,6 +93,9 @@ npm ci
 npm run build
 php artisan migrate --force
 php artisan db:seed --force   # только при первой установке / осознанно
+# Обновление с 2.5 → 2.6: синк ролей Spatie (идемпотентно)
+php artisan db:seed --class=Database\\Seeders\\RolesAndPermissionsSeeder --force
+php artisan permission:cache-reset   # если команда есть; иначе optimize:clear
 php artisan storage:link
 php artisan config:cache
 php artisan route:cache

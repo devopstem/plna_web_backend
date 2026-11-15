@@ -57,16 +57,11 @@ class SettingsController extends Controller implements HasMiddleware
                 'email' => $user->email,
                 'phone' => $user->phone ?? '',
                 'timezone' => $user->timezone ?: 'UTC',
-                'locale' => $user->locale ?: 'ru',
             ],
             'security' => [
                 'two_factor_enabled' => $this->twoFactor->isEnabled($user),
             ],
             'timezones' => $this->timezoneOptions(),
-            'locales' => [
-                ['value' => 'ru', 'label' => 'Русский'],
-                ['value' => 'en', 'label' => 'English'],
-            ],
             'can' => [
                 'profile' => (bool) $user->can(Permissions::EDIT_PROFILE),
                 'security' => (bool) $user->can(Permissions::EDIT_SECURITY),

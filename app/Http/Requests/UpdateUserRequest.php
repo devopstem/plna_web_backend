@@ -49,7 +49,7 @@ class UpdateUserRequest extends FormRequest
                 'exists:departments,id',
             ],
             'timezone' => ['nullable', 'string', 'max:50', 'timezone'],
-            'locale' => ['nullable', 'string', Rule::in(['ru', 'en'])],
+            'locale' => ['nullable', 'string', Rule::in(['ru'])],
             'is_active' => ['sometimes', 'boolean'],
             'password' => ['nullable', 'string', 'min:8'],
         ];
@@ -73,6 +73,11 @@ class UpdateUserRequest extends FormRequest
         if ($this->user() && ! $this->user()->isSuperAdmin()) {
             $this->merge(['tenant_id' => $this->user()->tenant_id]);
         }
+
+        $this->merge([
+            // UI i18n not shipped — keep a single locale.
+            'locale' => 'ru',
+        ]);
 
         if ($this->has('is_active')) {
             $this->merge([

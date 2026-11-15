@@ -1,6 +1,6 @@
 # Безопасность
 
-Версия документа: PLNA Web Backend **2.5**.
+Версия документа: PLNA Web Backend **2.6**.
 
 ## Секреты
 
@@ -51,6 +51,8 @@ LS_BYPASS_KEY=...
 php artisan db:seed --class="OzanKurt\\Shield\\Database\\Seeders\\LookupTableSeeder"
 php artisan db:seed --class="OzanKurt\\Shield\\Database\\Seeders\\BuiltinWafRuleSeeder"
 ```
+
+PLNA user ids — UUID/ULID. Upstream Shield типизирует `user_id` как `?int` и кэширует Eloquent Collection в Redis → `Incomplete_Class`. Совместимость: `patches/shield-uuid-user-id.php` (хук `composer post-autoload-dump`) + миграция `widen_shield_user_id_columns_for_uuid`. После `composer update` скрипт применится сам. При битом ACL-кэше: `redis-cli FLUSHDB` и `php artisan cache:clear`.
 
 Sanctum: `pushery/sanctum-hardening-for-laravel` (`config/sanctum-hardening.php`) — throttle/ограничения токенов поверх Sanctum, без смены login-flow.
 

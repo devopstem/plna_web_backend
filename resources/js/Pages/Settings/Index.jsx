@@ -28,13 +28,12 @@ function inputClass(hasError) {
     );
 }
 
-function ProfileTab({ profile, timezones, locales }) {
+function ProfileTab({ profile, timezones }) {
     const { data, setData, patch, processing, errors } = useForm({
         name: profile.name || '',
         email: profile.email || '',
         phone: profile.phone || '',
         timezone: profile.timezone || 'UTC',
-        locale: profile.locale || 'ru',
     });
 
     const submit = (e) => {
@@ -111,26 +110,6 @@ function ProfileTab({ profile, timezones, locales }) {
                         ))}
                     </select>
                     <FieldError message={errors.timezone} />
-                </div>
-
-                <div>
-                    <label htmlFor="locale" className="block text-sm font-medium text-slate-200">
-                        Язык
-                    </label>
-                    <select
-                        id="locale"
-                        value={data.locale}
-                        onChange={(e) => setData('locale', e.target.value)}
-                        className={inputClass(errors.locale)}
-                        required
-                    >
-                        {locales.map((locale) => (
-                            <option key={locale.value} value={locale.value}>
-                                {locale.label}
-                            </option>
-                        ))}
-                    </select>
-                    <FieldError message={errors.locale} />
                 </div>
             </div>
 
@@ -415,7 +394,6 @@ export default function Index({
     profile,
     security,
     timezones = [],
-    locales = [],
     can: canTabs = {},
 }) {
     const { flash } = usePage().props;
@@ -498,7 +476,6 @@ export default function Index({
                         <ProfileTab
                             profile={profile}
                             timezones={timezones}
-                            locales={locales}
                         />
                     )}
                     {tab === 'security' && <SecurityTab security={security} />}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresStoreAccess;
 use App\Http\Requests\SaveFloorPlanRequest;
 use App\Http\Requests\SetupFloorPlanRequest;
 use App\Http\Requests\StoreWallRequest;
@@ -25,6 +26,8 @@ use Throwable;
 
 class FloorPlanController extends Controller implements HasMiddleware
 {
+    use EnsuresStoreAccess;
+
     public function __construct(
         private readonly FloorPlanService $floorPlans,
     ) {}
@@ -74,7 +77,7 @@ class FloorPlanController extends Controller implements HasMiddleware
 
     public function create(Request $request): Response
     {
-        abort_unless($request->user()?->canSetupFloorPlanMap() === true, 403, 'Доступ только для Super Admin и Network Manager.');
+        abort_unless($request->user()?->canSetupFloorPlanMap() === true, 403, 'Доступ только для Super Admin, Заместителя и Заведующего.');
 
         $preselect = $request->string('store_id')->toString();
 
@@ -116,12 +119,13 @@ class FloorPlanController extends Controller implements HasMiddleware
 
     public function storeSetup(SetupFloorPlanRequest $request): RedirectResponse
     {
-        abort_unless($request->user()?->canSetupFloorPlanMap() === true, 403, 'Доступ только для Super Admin и Network Manager.');
+        abort_unless($request->user()?->canSetupFloorPlanMap() === true, 403, 'Доступ только для Super Admin, Заместителя и Заведующего.');
 
         $data = $request->validated();
 
         try {
             $store = $this->floorPlans->resolveStore($data['store_id']);
+            $this->assertCanModifyStore($store);
             $this->floorPlans->setupHall($store, $data);
         } catch (InvalidArgumentException $exception) {
             return redirect()
@@ -161,6 +165,7 @@ class FloorPlanController extends Controller implements HasMiddleware
     {
         try {
             $store = $this->floorPlans->resolveStore($storeId);
+            $this->assertCanModifyStore($store);
         } catch (InvalidArgumentException $exception) {
             abort(404, $exception->getMessage());
         }
@@ -172,6 +177,7 @@ class FloorPlanController extends Controller implements HasMiddleware
     {
         try {
             $store = $this->floorPlans->resolveStore($storeId);
+            $this->assertCanModifyStore($store);
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 404);
         }
@@ -191,6 +197,7 @@ class FloorPlanController extends Controller implements HasMiddleware
     {
         try {
             $store = $this->floorPlans->resolveStore($storeId);
+            $this->assertCanModifyStore($store);
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 404);
         }
@@ -212,6 +219,7 @@ class FloorPlanController extends Controller implements HasMiddleware
             return response()->json(['message' => 'Стена не найдена.'], 404);
         }
 
+        $this->assertCanModifyStore($store);
         $this->floorPlans->removeWall($wall);
 
         return response()->json([

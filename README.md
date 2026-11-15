@@ -1,10 +1,10 @@
-# PLNA Web Backend V 2.5
+# PLNA Web Backend V 2.6
 
 Веб-бэкенд экосистемы **PLNA** для управления планограммами розничных сетей: магазины, оборудование, товары, расстановки, план этажа, экспорт в мобильное приложение (Firebase), биллинг и администрирование арендаторов.
 
 | | |
 |---|---|
-| **Version** | `2.5.0` (см. [VERSION](VERSION)) |
+| **Version** | `2.6.0` (см. [VERSION](VERSION)) |
 | **Author** | [DevOpsTem](https://github.com/devopstem-debug) (`devopstem`) |
 | **License** | [MIT](LICENSE) |
 | **Stack** | Laravel 13 · Inertia/React · PostgreSQL · Redis · Firebase · Reverb · Shield WAF |
@@ -20,7 +20,24 @@
 - выгружать данные в Firebase Realtime Database для мобильного клиента;
 - управлять пользователями, ролями, подписками и счетами в мультиарендной модели.
 
-## Что нового в 2.5
+## Что нового в 2.6
+
+- **Канонический RBAC (Spatie):** Super Admin / Заместитель / Заведующий / Программист / Мерчандайзер
+- Route gates: `/admin/*` только Super Admin; billing/users/tenants — Tenant Admin+; floor-plan/planograms/shelves/export — Store Manager+
+- Store Manager: ownership checks (`EnsuresStoreAccess`) + department/store scope; Export JSON/Firebase только для своих магазинов
+- Программист и Мерчандайзер — API/mobile only (`EnsureApiOnlyRole` → `/mobile-only`)
+- `RolesAndPermissionsSeeder`; Shield UUID patch для `user_id`; убран фейковый UI locale
+
+### После обновления с 2.5
+
+```bash
+php artisan migrate --force
+php artisan db:seed --class=Database\\Seeders\\RolesAndPermissionsSeeder --force
+php artisan permission:cache-reset
+# или php artisan optimize:clear
+```
+
+## Что было в 2.5
 
 - **Security hardening перед публичным продом:** закрыта открытая регистрация; усилена SQL-консоль; HTTP SQL-дамп убран (только offline `pg_dump`)
 - Laravel Shield WAF (`ozankurt/laravel-security`) + Sanctum hardening

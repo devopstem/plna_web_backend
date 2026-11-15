@@ -16,6 +16,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LegalDocumentController;
 use App\Http\Controllers\LegalPublicController;
 use App\Http\Controllers\LogController;
+use App\Http\Controllers\MerchandiserAccessController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PlanogramController;
 use App\Http\Controllers\PricingController;
@@ -31,6 +32,10 @@ use App\Http\Controllers\TenantController;
 use App\Http\Controllers\UserController;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Route;
+
+$roleSuperAdmin = 'role:'.Permissions::ROLE_SUPER_ADMIN;
+$roleTenantAdmins = 'role:'.Permissions::ROLE_SUPER_ADMIN.'|'.Permissions::ROLE_DEPUTY;
+$roleStoreOps = 'role:'.Permissions::ROLE_SUPER_ADMIN.'|'.Permissions::ROLE_DEPUTY.'|'.Permissions::ROLE_HEAD;
 
 Route::get('/', function () {
     return auth()->check()
@@ -48,9 +53,11 @@ Route::middleware('auth')->group(function (): void {
         ->name('account.deactivated');
     Route::get('account-locked', [AccountStatusController::class, 'locked'])
         ->name('account.locked');
+    Route::get('mobile-only', [MerchandiserAccessController::class, 'mobileOnly'])
+        ->name('merchandiser.mobile-only');
 });
 
-Route::middleware(['auth', 'user.active', 'tenant.active'])->group(function () {
+Route::middleware(['auth', 'user.active', 'tenant.active', 'merchandiser.mobile', $roleTenantAdmins])->group(function () {
     Route::get('billing', [BillingController::class, 'index'])->name('billing.index');
     Route::post('billing/subscribe', [BillingController::class, 'subscribe'])->name('billing.subscribe');
     Route::post('billing/confirm-payment', [BillingController::class, 'confirmPayment'])
@@ -59,7 +66,7 @@ Route::middleware(['auth', 'user.active', 'tenant.active'])->group(function () {
         ->name('billing.bank-details');
 });
 
-Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'])->group(function () {
+Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active', 'merchandiser.mobile'])->group(function () use ($roleSuperAdmin, $roleTenantAdmins, $roleStoreOps) {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
     Route::get('/system-health', [SystemHealthController::class, 'index'])
@@ -79,65 +86,71 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
     Route::post('chat/conversations/{conversationId}/read', [ChatController::class, 'markRead'])
         ->name('chat.messages.read');
 
-    Route::post('users/{id}/toggle-active', [UserController::class, 'toggleActive'])
-        ->name('users.toggle-active');
-    Route::post('users/{id}/sync-firebase', [UserController::class, 'syncFirebase'])
-        ->name('users.sync-firebase');
-    Route::post('users/{id}/delete-firebase', [UserController::class, 'deleteFromFirebase'])
-        ->name('users.delete-firebase');
-    Route::post('users/{id}/comments', [UserController::class, 'storeComment'])
-        ->name('users.comments.store');
-    Route::resource('users', UserController::class);
+    Route::middleware($roleTenantAdmins)->group(function (): void {
+        Route::post('users/{id}/toggle-active', [UserController::class, 'toggleActive'])
+            ->name('users.toggle-active');
+        Route::post('users/{id}/sync-firebase', [UserController::class, 'syncFirebase'])
+            ->name('users.sync-firebase');
+        Route::post('users/{id}/delete-firebase', [UserController::class, 'deleteFromFirebase'])
+            ->name('users.delete-firebase');
+        Route::post('users/{id}/comments', [UserController::class, 'storeComment'])
+            ->name('users.comments.store');
+        Route::resource('users', UserController::class);
 
-    Route::post('tenants/{tenant}/toggle-active', [TenantController::class, 'toggleActive'])
-        ->name('tenants.toggle-active');
-    Route::resource('tenants', TenantController::class)->except(['destroy']);
+        Route::post('tenants/{tenant}/toggle-active', [TenantController::class, 'toggleActive'])
+            ->name('tenants.toggle-active');
+        Route::resource('tenants', TenantController::class)->except(['destroy']);
+    });
 
-    Route::post('admin/payments/{payment}/approve', [PlanController::class, 'approvePayment'])
-        ->name('admin.payments.approve');
-    Route::post('admin/payments/{payment}/reject', [PlanController::class, 'rejectPayment'])
-        ->name('admin.payments.reject');
-    Route::post('admin/bank-accounts', [PlanController::class, 'storeBankAccount'])
-        ->name('admin.bank-accounts.store');
-    Route::put('admin/bank-accounts/{bankAccount}', [PlanController::class, 'updateBankAccount'])
-        ->name('admin.bank-accounts.update');
-    Route::delete('admin/bank-accounts/{bankAccount}', [PlanController::class, 'destroyBankAccount'])
-        ->name('admin.bank-accounts.destroy');
-    Route::resource('admin/plans', PlanController::class)
-        ->except(['show'])
-        ->names('admin.plans')
-        ->parameters(['plans' => 'plan']);
+    Route::middleware($roleSuperAdmin)->prefix('admin')->group(function (): void {
+        Route::post('payments/{payment}/approve', [PlanController::class, 'approvePayment'])
+            ->name('admin.payments.approve');
+        Route::post('payments/{payment}/reject', [PlanController::class, 'rejectPayment'])
+            ->name('admin.payments.reject');
+        Route::post('bank-accounts', [PlanController::class, 'storeBankAccount'])
+            ->name('admin.bank-accounts.store');
+        Route::put('bank-accounts/{bankAccount}', [PlanController::class, 'updateBankAccount'])
+            ->name('admin.bank-accounts.update');
+        Route::delete('bank-accounts/{bankAccount}', [PlanController::class, 'destroyBankAccount'])
+            ->name('admin.bank-accounts.destroy');
+        Route::resource('plans', PlanController::class)
+            ->except(['show'])
+            ->names('admin.plans')
+            ->parameters(['plans' => 'plan']);
 
-    Route::get('admin/invoices', [InvoiceController::class, 'index'])->name('admin.invoices.index');
-    Route::get('admin/invoices/create', [InvoiceController::class, 'create'])->name('admin.invoices.create');
-    Route::post('admin/invoices', [InvoiceController::class, 'store'])->name('admin.invoices.store');
-    Route::get('admin/invoices/{invoice}/pdf', [InvoiceController::class, 'generatePdf'])->name('admin.invoices.pdf');
-    Route::post('admin/invoices/{invoice}/mark-paid', [InvoiceController::class, 'markAsPaid'])->name('admin.invoices.mark-paid');
-    Route::post('admin/invoices/{invoice}/send', [InvoiceController::class, 'sendToEmail'])->name('admin.invoices.send');
+        Route::get('invoices', [InvoiceController::class, 'index'])->name('admin.invoices.index');
+        Route::get('invoices/create', [InvoiceController::class, 'create'])->name('admin.invoices.create');
+        Route::post('invoices', [InvoiceController::class, 'store'])->name('admin.invoices.store');
+        Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'generatePdf'])->name('admin.invoices.pdf');
+        Route::post('invoices/{invoice}/mark-paid', [InvoiceController::class, 'markAsPaid'])->name('admin.invoices.mark-paid');
+        Route::post('invoices/{invoice}/send', [InvoiceController::class, 'sendToEmail'])->name('admin.invoices.send');
 
-    Route::get('admin/legal', [LegalDocumentController::class, 'index'])->name('admin.legal.index');
-    Route::get('admin/legal/create', [LegalDocumentController::class, 'create'])->name('admin.legal.create');
-    Route::post('admin/legal', [LegalDocumentController::class, 'store'])->name('admin.legal.store');
-    Route::get('admin/legal/{legal}/edit', [LegalDocumentController::class, 'edit'])->name('admin.legal.edit');
-    Route::put('admin/legal/{legal}', [LegalDocumentController::class, 'update'])->name('admin.legal.update');
-    Route::post('admin/legal/{legal}/publish', [LegalDocumentController::class, 'publish'])->name('admin.legal.publish');
-    Route::get('admin/legal/{legal}/pdf', [LegalDocumentController::class, 'downloadPdf'])->name('admin.legal.pdf');
+        Route::get('legal', [LegalDocumentController::class, 'index'])->name('admin.legal.index');
+        Route::get('legal/create', [LegalDocumentController::class, 'create'])->name('admin.legal.create');
+        Route::post('legal', [LegalDocumentController::class, 'store'])->name('admin.legal.store');
+        Route::get('legal/{legal}/edit', [LegalDocumentController::class, 'edit'])->name('admin.legal.edit');
+        Route::put('legal/{legal}', [LegalDocumentController::class, 'update'])->name('admin.legal.update');
+        Route::post('legal/{legal}/publish', [LegalDocumentController::class, 'publish'])->name('admin.legal.publish');
+        Route::get('legal/{legal}/pdf', [LegalDocumentController::class, 'downloadPdf'])->name('admin.legal.pdf');
+    });
 
-    Route::get('database/sql', [DatabaseController::class, 'sql'])->name('database.sql');
-    Route::post('database/sql', [DatabaseController::class, 'executeSql'])->name('database.sql.execute');
-    Route::get('database', [DatabaseController::class, 'index'])->name('database.index');
-    Route::get('database/{table}', [DatabaseController::class, 'show'])->name('database.show');
+    Route::middleware($roleSuperAdmin)->group(function (): void {
+        Route::get('database/sql', [DatabaseController::class, 'sql'])->name('database.sql');
+        Route::post('database/sql', [DatabaseController::class, 'executeSql'])->name('database.sql.execute');
+        Route::get('database', [DatabaseController::class, 'index'])->name('database.index');
+        Route::get('database/{table}', [DatabaseController::class, 'show'])->name('database.show');
 
-    Route::get('product-bot', [ProductBotController::class, 'index'])->name('product-bot.index');
-    Route::post('product-bot/scan', [ProductBotController::class, 'scan'])->name('product-bot.scan');
-    Route::post('product-bot/jobs/{job}/accept', [ProductBotController::class, 'accept'])
-        ->name('product-bot.accept');
-    Route::post('product-bot/jobs/{job}/reject', [ProductBotController::class, 'reject'])
-        ->name('product-bot.reject');
-    Route::post('product-bot/rules', [ProductBotController::class, 'storeRule'])
-        ->name('product-bot.rules.store');
-    Route::delete('product-bot/rules/{rule}', [ProductBotController::class, 'destroyRule'])
-        ->name('product-bot.rules.destroy');
+        Route::get('product-bot', [ProductBotController::class, 'index'])->name('product-bot.index');
+        Route::post('product-bot/scan', [ProductBotController::class, 'scan'])->name('product-bot.scan');
+        Route::post('product-bot/jobs/{job}/accept', [ProductBotController::class, 'accept'])
+            ->name('product-bot.accept');
+        Route::post('product-bot/jobs/{job}/reject', [ProductBotController::class, 'reject'])
+            ->name('product-bot.reject');
+        Route::post('product-bot/rules', [ProductBotController::class, 'storeRule'])
+            ->name('product-bot.rules.store');
+        Route::delete('product-bot/rules/{rule}', [ProductBotController::class, 'destroyRule'])
+            ->name('product-bot.rules.destroy');
+    });
 
     Route::get('logs', [LogController::class, 'index'])->name('logs.index');
     Route::get('logs/audit', [LogController::class, 'audit'])->name('logs.audit');
@@ -173,14 +186,6 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
         ->name('departments.force-delete');
     Route::resource('departments', DepartmentController::class)->except(['show']);
 
-    Route::get('shelves/preview-code', [ShelfController::class, 'previewCode'])
-        ->name('shelves.preview-code');
-    Route::post('shelves/{id}/restore', [ShelfController::class, 'restore'])
-        ->name('shelves.restore');
-    Route::delete('shelves/{id}/force', [ShelfController::class, 'forceDelete'])
-        ->name('shelves.force-delete');
-    Route::resource('shelves', ShelfController::class)->except(['show']);
-
     Route::get('coolers/preview-code', [CoolerController::class, 'previewCode'])
         ->name('coolers.preview-code');
     Route::post('coolers/{id}/restore', [CoolerController::class, 'restore'])
@@ -209,32 +214,42 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
     Route::post('settings/two-factor/disable', [SettingsController::class, 'disableTwoFactor'])
         ->name('settings.two-factor.disable');
 
-    Route::get('planograms', [PlanogramController::class, 'index'])->name('planograms.index');
-    Route::get('planograms/{shelf}', [PlanogramController::class, 'show'])->name('planograms.show');
-    Route::post('planograms/placements', [PlanogramController::class, 'storePlacement'])
-        ->name('planograms.placements.store');
-    Route::post('planograms/{shelf}/placements', [PlanogramController::class, 'storePlacement'])
-        ->name('planograms.placements.store.shelf');
-    Route::delete('planograms/placements/{id}', [PlanogramController::class, 'destroyPlacement'])
-        ->name('planograms.placements.destroy');
+    Route::middleware($roleStoreOps)->group(function (): void {
+        Route::get('shelves/preview-code', [ShelfController::class, 'previewCode'])
+            ->name('shelves.preview-code');
+        Route::post('shelves/{id}/restore', [ShelfController::class, 'restore'])
+            ->name('shelves.restore');
+        Route::delete('shelves/{id}/force', [ShelfController::class, 'forceDelete'])
+            ->name('shelves.force-delete');
+        Route::resource('shelves', ShelfController::class)->except(['show']);
 
-    Route::get('floor-plan', [FloorPlanController::class, 'stores'])->name('floor-plan.stores');
-    Route::get('floor-plan/create', [FloorPlanController::class, 'create'])->name('floor-plan.create');
-    Route::post('floor-plan/setup', [FloorPlanController::class, 'storeSetup'])->name('floor-plan.setup');
-    Route::get('floor-plan/{store}/edit', [FloorPlanController::class, 'edit'])->name('floor-plan.edit');
-    Route::get('floor-plan/{store}', [FloorPlanController::class, 'index'])->name('floor-plan.index');
-    Route::post('floor-plan/{store}/save', [FloorPlanController::class, 'save'])->name('floor-plan.save');
-    Route::post('floor-plan/{store}/walls', [FloorPlanController::class, 'addWall'])->name('floor-plan.walls.store');
-    Route::delete('floor-plan/walls/{wall}', [FloorPlanController::class, 'removeWall'])->name('floor-plan.walls.destroy');
+        Route::get('planograms', [PlanogramController::class, 'index'])->name('planograms.index');
+        Route::get('planograms/{shelf}', [PlanogramController::class, 'show'])->name('planograms.show');
+        Route::post('planograms/placements', [PlanogramController::class, 'storePlacement'])
+            ->name('planograms.placements.store');
+        Route::post('planograms/{shelf}/placements', [PlanogramController::class, 'storePlacement'])
+            ->name('planograms.placements.store.shelf');
+        Route::delete('planograms/placements/{id}', [PlanogramController::class, 'destroyPlacement'])
+            ->name('planograms.placements.destroy');
 
-    Route::get('export', [ExportController::class, 'index'])->name('export.index');
-    // catalog до {storeId}, иначе "catalog" матчится как storeId
-    Route::post('export/catalog/firebase', [ExportController::class, 'syncCatalogToFirebase'])
-        ->name('export.catalog.firebase');
-    Route::get('export/{storeId}/download', [ExportController::class, 'download'])
-        ->name('export.download');
-    Route::post('export/{storeId}/firebase', [ExportController::class, 'sendToFirebase'])
-        ->name('export.firebase');
+        Route::get('floor-plan', [FloorPlanController::class, 'stores'])->name('floor-plan.stores');
+        Route::get('floor-plan/create', [FloorPlanController::class, 'create'])->name('floor-plan.create');
+        Route::post('floor-plan/setup', [FloorPlanController::class, 'storeSetup'])->name('floor-plan.setup');
+        Route::get('floor-plan/{store}/edit', [FloorPlanController::class, 'edit'])->name('floor-plan.edit');
+        Route::get('floor-plan/{store}', [FloorPlanController::class, 'index'])->name('floor-plan.index');
+        Route::post('floor-plan/{store}/save', [FloorPlanController::class, 'save'])->name('floor-plan.save');
+        Route::post('floor-plan/{store}/walls', [FloorPlanController::class, 'addWall'])->name('floor-plan.walls.store');
+        Route::delete('floor-plan/walls/{wall}', [FloorPlanController::class, 'removeWall'])->name('floor-plan.walls.destroy');
+
+        Route::get('export', [ExportController::class, 'index'])->name('export.index');
+        // catalog до {storeId}, иначе "catalog" матчится как storeId
+        Route::post('export/catalog/firebase', [ExportController::class, 'syncCatalogToFirebase'])
+            ->name('export.catalog.firebase');
+        Route::get('export/{storeId}/download', [ExportController::class, 'download'])
+            ->name('export.download');
+        Route::post('export/{storeId}/firebase', [ExportController::class, 'sendToFirebase'])
+            ->name('export.firebase');
+    });
 
     Route::get('import', [ImportController::class, 'index'])->name('import.index');
     Route::post('import/upload', [ImportController::class, 'upload'])->name('import.upload');
