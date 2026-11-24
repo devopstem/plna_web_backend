@@ -89,7 +89,8 @@ export default function Index({ result = null }) {
                     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-sm text-slate-300">
-                                Формат: CSV с разделителем «;». Колонки:{' '}
+                                Формат: CSV (разделитель «;» или «,»). Штрихкод —
+                                только цифры, до 14. Колонки:{' '}
                                 <span className="font-mono text-xs text-white">
                                     barcode;name;category;volume_ml;package_type;width_mm;height_mm;depth_mm;weight_g
                                 </span>
@@ -132,12 +133,16 @@ export default function Index({ result = null }) {
                                 Перетащите CSV сюда или нажмите для выбора
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
-                                Максимум 10 МБ
+                                Через сайт — до 128 МБ. Больше / нестабильный
+                                upload: artisan products:import
                             </p>
                             {file && (
                                 <p className="mt-3 rounded-lg bg-[#152033] px-3 py-1.5 text-xs font-medium text-indigo-300 ring-1 ring-indigo-200">
                                     {file.name} (
-                                    {(file.size / 1024).toFixed(1)} КБ)
+                                    {file.size >= 1024 * 1024
+                                        ? `${(file.size / (1024 * 1024)).toFixed(1)} МБ`
+                                        : `${(file.size / 1024).toFixed(1)} КБ`}
+                                    )
                                 </p>
                             )}
                             <input

@@ -1,21 +1,60 @@
-MIT License
+PROPRIETARY SOFTWARE LICENSE
+PLNA Web Backend
 
-Copyright (c) 2024-2026 DevOpsTem (devopstem / devopstem-debug)
+Copyright (c) 2024–2026 DevOpsTem (devopstem / @devopstem-debug).
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+================================================================================
+IMPORTANT — THIS IS NOT AN OPEN-SOURCE / MIT / PUBLIC LICENSE
+================================================================================
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This software (“Software”), including its source code, documentation, scripts,
+configuration templates, and related materials, is the exclusive proprietary
+property of DevOpsTem (“Licensor”).
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. GRANT OF RIGHTS
+   Limited rights to use the Software are granted only under a separate written
+   agreement with the Licensor (subscription, SaaS access, OEM, or commercial
+   license). No rights are granted by merely obtaining a copy of this repository.
+
+2. RESTRICTIONS
+   Without prior written permission from the Licensor, you may NOT:
+   (a) copy, modify, merge, publish, distribute, sublicense, sell, lease, or
+       otherwise transfer the Software or any substantial portion thereof;
+   (b) reverse engineer, decompile, or create derivative works for redistribution;
+   (c) remove or alter copyright, proprietary, or license notices;
+   (d) use the Software to provide a competing hosted product without a written
+       commercial agreement.
+
+3. CONFIDENTIALITY
+   Source code and non-public documentation are confidential. Recipients with
+   repository access (employees, contractors, customers under NDA) must protect
+   them with at least the same care as their own confidential information.
+
+4. THIRD-PARTY COMPONENTS
+   Open-source dependencies bundled via Composer/npm remain under their own
+   licenses (MIT, Apache-2.0, etc.). This proprietary license applies to the
+   PLNA application code and original assets authored by DevOpsTem.
+
+5. NO WARRANTY
+   EXCEPT AS EXPRESSLY STATED IN A WRITTEN AGREEMENT, THE SOFTWARE IS PROVIDED
+   “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+   LIMITED TO MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NON-INFRINGEMENT.
+
+6. LIMITATION OF LIABILITY
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR SHALL NOT BE LIABLE FOR
+   ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY
+   LOSS OF PROFITS, DATA, OR BUSINESS, ARISING OUT OF USE OF THE SOFTWARE.
+
+7. TERMINATION
+   Any unauthorized use terminates all implied or informal permissions
+   immediately. Upon termination you must cease use and destroy copies under
+   your control, except archival copies required by law.
+
+8. CONTACT
+   Licensing and commercial inquiries: DevOpsTem — see README author contacts /
+   GitHub profile linked from the project README.
+
+For production use, deployments, and redistribution, obtain an explicit written
+license from the Licensor.

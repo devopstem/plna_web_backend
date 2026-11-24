@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresStoreAccess;
+use App\Jobs\SyncCatalogToFirebase;
 use App\Jobs\SyncStoreToFirebase;
 use App\Models\Store;
 use App\Models\SyncLog;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -68,14 +70,20 @@ class ExportController extends Controller implements HasMiddleware
             ->values()
             ->all();
 
-        $latestByStore = SyncLog::query()
+        // One latest SyncLog per store without loading the full history into PHP.
+        $latestLogIds = SyncLog::query()
             ->when(
                 $user && ! $user->isSuperAdmin() && $tenantId,
                 fn ($query) => $query->where('tenant_id', $tenantId),
             )
-            ->latest('synced_at')
+            ->select(DB::raw('DISTINCT ON (store_id) id'))
+            ->orderBy('store_id')
+            ->orderByDesc('synced_at')
+            ->pluck('id');
+
+        $latestByStore = SyncLog::query()
+            ->whereIn('id', $latestLogIds)
             ->get()
-            ->unique('store_id')
             ->mapWithKeys(fn (SyncLog $log) => [
                 $log->store_id => $this->transformSyncLog($log, $timezone),
             ])
@@ -151,41 +159,19 @@ class ExportController extends Controller implements HasMiddleware
                 ]);
             }
 
-            // Синхронный запуск в обход unique-lock очереди (ручная кнопка).
-            $job = new SyncStoreToFirebase($store->id, $user?->id);
-            app()->call([$job, 'handle']);
-
-            $latest = SyncLog::query()
-                ->where('store_id', $store->id)
-                ->latest('synced_at')
-                ->first();
-
-            if ($latest?->status === SyncLog::STATUS_FAILED) {
-                throw ValidationException::withMessages([
-                    'firebase' => $latest->message ?: 'Синхронизация завершилась с ошибкой.',
-                ]);
-            }
-
-            if ($latest?->status === SyncLog::STATUS_SKIPPED) {
-                throw ValidationException::withMessages([
-                    'firebase' => $latest->message ?: 'Firebase не настроен.',
-                ]);
-            }
-
             $catalogTenantId = $store->tenant_id ?? $this->catalog->resolveTenantIdForActor();
-            $catalogResult = $this->catalog->sync($catalogTenantId);
 
-            $message = sprintf(
-                'Магазин и каталог синхронизированы с Firebase (%d SKU).',
-                $catalogResult['count'],
-            );
+            // Queue heavy Firebase work — UI polls SyncLog / notifications for result.
+            SyncStoreToFirebase::dispatch($store->id, $user?->id);
+            SyncCatalogToFirebase::dispatch($catalogTenantId, $user?->id);
+
+            $message = 'Синхронизация магазина и каталога поставлена в очередь. Статус появится в журнале ниже.';
 
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => true,
                     'message' => $message,
-                    'catalog_count' => $catalogResult['count'],
-                    'latest' => $latest ? $this->transformSyncLog($latest, $user?->timezone ?? 'UTC') : null,
+                    'queued' => true,
                 ]);
             }
 
@@ -238,19 +224,15 @@ class ExportController extends Controller implements HasMiddleware
                 ]);
             }
 
-            $result = $this->catalog->sync($tenantId);
-            $message = sprintf(
-                'Каталог синхронизирован с Firebase (%d SKU, %s).',
-                $result['count'],
-                $result['updated_at'],
-            );
+            SyncCatalogToFirebase::dispatch($tenantId, $user?->id);
+
+            $message = 'Синхронизация каталога поставлена в очередь.';
 
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => true,
                     'message' => $message,
-                    'count' => $result['count'],
-                    'updated_at' => $result['updated_at'],
+                    'queued' => true,
                 ]);
             }
 
@@ -350,9 +332,9 @@ class ExportController extends Controller implements HasMiddleware
         $storeId = $request->input('store_id');
 
         if (is_string($storeId) && $storeId !== '') {
-            $store = Store::query()->find($storeId);
+            $store = $this->findAuthorizedStore($storeId);
 
-            if ($store?->tenant_id) {
+            if ($store->tenant_id) {
                 return (string) $store->tenant_id;
             }
         }

@@ -22,6 +22,8 @@ class SyncStoreToFirebase implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 3;
 
+    public int $timeout = 180;
+
     /** @var list<int> */
     public array $backoff = [300];
 

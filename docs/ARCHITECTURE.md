@@ -87,6 +87,12 @@ flowchart TB
 - Security headers middleware.
 - Секреты только в `.env` и `storage/app/private`.
 - Права проверяются через permission middleware / политики сервисов.
+- Глобальный каталог товаров: мутации только Super Admin (`ProductCatalogAuthority`); арендаторы — private SKU.
+- Ручной Firebase sync — через queue jobs (не блокирует HTTP).
+
+## Лицензия
+
+Код приложения — **proprietary** ([LICENSE](../LICENSE)). Зависимости Composer/npm — по своим лицензиям.
 
 ## Поток экспорта магазина
 

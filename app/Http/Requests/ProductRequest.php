@@ -6,6 +6,7 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\AuthorizesCrudPermission;
 use App\Support\Permissions;
+use App\Support\ProductBarcode;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,18 +29,15 @@ class ProductRequest extends FormRequest
 
         return [
             'barcode' => [
-                'required',
-                'string',
-                'size:13',
-                'regex:/^\d{13}$/',
+                ...ProductBarcode::rules(),
                 Rule::unique('products', 'barcode')
                     ->whereNull('deleted_at')
                     ->ignore($productId),
             ],
             'name' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:255'],
             'volume_ml' => ['nullable', 'integer', 'min:0'],
-            'package_type' => ['nullable', 'string', 'max:50'],
+            'package_type' => ['nullable', 'string', 'max:255'],
             'width_mm' => ['nullable', 'integer', 'min:0'],
             'height_mm' => ['nullable', 'integer', 'min:0'],
             'depth_mm' => ['nullable', 'integer', 'min:0'],
@@ -55,9 +53,7 @@ class ProductRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'barcode.required' => 'Укажите штрихкод.',
-            'barcode.size' => 'Штрихкод должен содержать 13 символов.',
-            'barcode.regex' => 'Штрихкод должен состоять из 13 цифр.',
+            ...ProductBarcode::messages(),
             'barcode.unique' => 'Товар с таким штрихкодом уже существует в каталоге.',
             'name.required' => 'Укажите название товара.',
         ];
@@ -69,7 +65,7 @@ class ProductRequest extends FormRequest
         $merged = [
             'checked' => $this->boolean('checked'),
             'is_private' => $this->boolean('is_private'),
-            'barcode' => preg_replace('/\s+/', '', (string) $this->input('barcode', '')),
+            'barcode' => ProductBarcode::normalize($this->input('barcode', '')),
         ];
 
         foreach ($nullableInts as $field) {

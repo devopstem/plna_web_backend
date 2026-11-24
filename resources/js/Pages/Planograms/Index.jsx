@@ -1,6 +1,7 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowDownTrayIcon,
+    ArrowUpTrayIcon,
     PencilSquareIcon,
     PlusIcon,
     PrinterIcon,
@@ -490,9 +491,25 @@ export default function Index({
     return (
         <AdminLayout
             header={
-                <h1 className="text-xl font-semibold leading-tight text-white">
-                    Планограммы
-                </h1>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h1 className="text-xl font-semibold leading-tight text-white">
+                        Планограммы
+                    </h1>
+                    {canEdit ? (
+                        <Link
+                            href={route('planograms.sheet-import.create', {
+                                store_id: storeId || undefined,
+                                shelf_id: filters.shelf_id || undefined,
+                                cooler_id: filters.cooler_id || undefined,
+                                stand_id: filters.stand_id || undefined,
+                            })}
+                            className="no-print inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-sm font-medium text-indigo-200 hover:bg-indigo-500/20"
+                        >
+                            <ArrowUpTrayIcon className="h-4 w-4" />
+                            Импорт с листа A4
+                        </Link>
+                    ) : null}
+                </div>
             }
         >
             <Head title="Планограммы">

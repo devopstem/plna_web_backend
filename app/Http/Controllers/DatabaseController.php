@@ -37,7 +37,6 @@ class DatabaseController extends Controller implements HasMiddleware
         return Inertia::render('Database/Index', [
             'tables' => $this->databaseViewer->tablesWithCounts(),
             // HTTP SQL dump removed — use offline pg_dump on the server only.
-            'canExportSql' => false,
             'driver' => (string) config('database.default'),
         ]);
     }

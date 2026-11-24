@@ -1,6 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import {
-    ArrowDownTrayIcon,
     CircleStackIcon,
     CommandLineIcon,
     TableCellsIcon,
@@ -15,7 +14,6 @@ function formatCount(value) {
 
 export default function Index({
     tables = [],
-    canExportSql = false,
     driver = 'pgsql',
 }) {
     const { flash } = usePage().props;
@@ -37,16 +35,6 @@ export default function Index({
                         База данных
                     </h1>
                     <div className="flex flex-wrap items-center gap-2">
-                        {canExportSql ? (
-                            <a
-                                href={route('database.export-sql')}
-                                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                                title="Скачать полный дамп БД (.sql) для переноса на другой VPS"
-                            >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                                Экспорт SQL
-                            </a>
-                        ) : null}
                         <Link
                             href={route('database.sql')}
                             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
@@ -61,23 +49,21 @@ export default function Index({
             <Head title="База данных" />
 
             <div className="space-y-4">
-                {canExportSql ? (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-slate-300">
-                        <p className="font-medium text-emerald-200">
-                            Бэкап для переезда на другой VPS
-                        </p>
-                        <p className="mt-1 text-slate-400">
-                            Кнопка «Экспорт SQL» скачивает полный дамп (
-                            <span className="font-mono text-slate-300">
-                                {driver}
-                            </span>
-                            ). В файл не входят{' '}
-                            <code className="text-slate-300">.env</code>, файлы
-                            из <code className="text-slate-300">storage/</code>{' '}
-                            и Firebase credentials — скопируйте их отдельно.
-                        </p>
-                    </div>
-                ) : null}
+                <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
+                    <p className="font-medium text-slate-200">
+                        Бэкап только offline
+                    </p>
+                    <p className="mt-1 text-slate-400">
+                        HTTP SQL-дамп отключён. Полный бэкап{' '}
+                        <span className="font-mono text-slate-300">{driver}</span>{' '}
+                        — через <code className="text-slate-300">pg_dump</code> /{' '}
+                        <code className="text-slate-300">scripts/deploy.sh</code> на
+                        сервере. Секреты из{' '}
+                        <code className="text-slate-300">.env</code> и{' '}
+                        <code className="text-slate-300">storage/</code> копируйте
+                        отдельно.
+                    </p>
+                </div>
 
                 <div className="overflow-hidden rounded-xl bg-[#152033] shadow-sm ring-1 ring-slate-800">
                     <div className="border-b border-slate-800 px-4 py-4 sm:px-6">

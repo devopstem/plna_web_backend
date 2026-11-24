@@ -113,7 +113,7 @@ users/{firebase_uid}/
 - Лог: `sync_logs` (`status`, `json_size`, `message`, `synced_at`)
 - При окончательном провале — уведомление tenant (тип error)
 - Статус: `GET /api/v1/sync/status?store_id=`
-- Ручной запуск: **Экспорт → Синхронизировать сейчас**
+- Ручной запуск: **Экспорт → Синхронизировать сейчас** (ставит `SyncStoreToFirebase` + `SyncCatalogToFirebase` в очередь; HTTP больше не гоняет sync синхронно)
 
 Нужен воркер: `php artisan queue:work`
 
@@ -123,7 +123,7 @@ users/{firebase_uid}/
 
 | Действие | Где |
 |----------|-----|
-| Ручная синхронизация | **Экспорт → Синхронизировать каталог** |
+| Ручная синхронизация | **Экспорт → Синхронизировать каталог** (очередь `SyncCatalogToFirebase`) |
 | Автосинхронизация | Job `SyncCatalogToFirebase` при изменении Product (debounce ~5 с) |
 
 Структура узла:

@@ -19,6 +19,7 @@ use App\Http\Controllers\LogController;
 use App\Http\Controllers\MerchandiserAccessController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PlanogramController;
+use App\Http\Controllers\PlanogramSheetImportController;
 use App\Http\Controllers\PricingController;
 use App\Http\Controllers\ProductBotController;
 use App\Http\Controllers\ProductController;
@@ -178,6 +179,8 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
         ->name('products.force-delete');
     Route::get('products/barcode-lookup', [ProductController::class, 'lookupBarcode'])
         ->name('products.barcode-lookup');
+    Route::get('products/search', [ProductController::class, 'search'])
+        ->name('products.search');
     Route::resource('products', ProductController::class)->except(['show']);
 
     Route::post('departments/{id}/restore', [DepartmentController::class, 'restore'])
@@ -224,6 +227,20 @@ Route::middleware(['auth', 'user.active', 'tenant.active', 'subscription.active'
         Route::resource('shelves', ShelfController::class)->except(['show']);
 
         Route::get('planograms', [PlanogramController::class, 'index'])->name('planograms.index');
+        Route::get('planograms/sheet-import', [PlanogramSheetImportController::class, 'create'])
+            ->name('planograms.sheet-import.create');
+        Route::post('planograms/sheet-import', [PlanogramSheetImportController::class, 'store'])
+            ->name('planograms.sheet-import.store');
+        Route::get('planograms/sheet-import/{import}', [PlanogramSheetImportController::class, 'show'])
+            ->name('planograms.sheet-import.show');
+        Route::get('planograms/sheet-import/{import}/image', [PlanogramSheetImportController::class, 'image'])
+            ->name('planograms.sheet-import.image');
+        Route::post('planograms/sheet-import/{import}/reparse', [PlanogramSheetImportController::class, 'reparse'])
+            ->name('planograms.sheet-import.reparse');
+        Route::patch('planograms/sheet-import/rows/{row}', [PlanogramSheetImportController::class, 'updateRow'])
+            ->name('planograms.sheet-import.rows.update');
+        Route::post('planograms/sheet-import/{import}/commit', [PlanogramSheetImportController::class, 'commit'])
+            ->name('planograms.sheet-import.commit');
         Route::get('planograms/{shelf}', [PlanogramController::class, 'show'])->name('planograms.show');
         Route::post('planograms/placements', [PlanogramController::class, 'storePlacement'])
             ->name('planograms.placements.store');

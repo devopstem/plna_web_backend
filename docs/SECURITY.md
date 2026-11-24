@@ -1,6 +1,6 @@
 # Безопасность
 
-Версия документа: PLNA Web Backend **2.6**.
+Версия документа: PLNA Web Backend **2.7**.
 
 ## Секреты
 
@@ -96,14 +96,21 @@ REVERB_INTERNAL_SCHEME=http
 
 ## CI-аудиты и SonarCloud
 
-Workflow `.github/workflows/ci.yml`:
+Workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (Postgres **16**, PHP **8.4**):
 
-1. `composer audit` — падает при известных CVE в PHP-зависимостях
-2. `npm audit --audit-level=high` — падает при high/critical в JS
-3. PHPUnit + Clover coverage
-4. SonarCloud Scan (`secrets.SONAR_TOKEN`, `sonar-project.properties`)
+1. `composer audit` — падает при известных CVE в PHP-зависимостях  
+2. `npm audit --audit-level=high` — падает при high/critical в JS  
+3. `npm run build` — фронтенд Vite обязан собираться  
+4. migrate + PHPUnit → `coverage/clover.xml` + `coverage/junit.xml`  
+5. Laravel Pint (`--test`) + Larastan/PHPStan  
+6. SonarCloud Scan + **Quality Gate** (обязателен `secrets.SONAR_TOKEN`)
 
-Локально: `composer run audit`.
+Конфиг анализа: [`sonar-project.properties`](../sonar-project.properties)  
+(`sonar.projectVersion` синхронизируйте с корневым `VERSION` при релизе).
+
+Локально: `composer run audit`, `composer run analyse`, `composer run lint`, `php artisan test`.
+
+Quality Gate в CI падает, если SonarCloud не пропускает ветку/PR (coverage / bugs / smells по правилам организации `devopstem`).
 
 ## Инциденты с credentials
 

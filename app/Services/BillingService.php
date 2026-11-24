@@ -181,14 +181,17 @@ class BillingService
 
     public function approvePayment(Payment $payment, User $actor): Payment
     {
-        if ($payment->status === Payment::STATUS_PAID) {
-            return $payment;
-        }
-
         return DB::transaction(function () use ($payment, $actor): Payment {
-            $subscription = $payment->subscription()->with('plan')->firstOrFail();
+            /** @var Payment $locked */
+            $locked = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->status === Payment::STATUS_PAID) {
+                return $locked->load('subscription.plan');
+            }
+
+            $subscription = $locked->subscription()->with('plan')->lockForUpdate()->firstOrFail();
             $plan = $subscription->plan;
-            $tenant = $payment->tenant()->firstOrFail();
+            $tenant = $locked->tenant()->lockForUpdate()->firstOrFail();
             $now = now();
 
             $tenant->subscriptions()
@@ -206,7 +209,7 @@ class BillingService
                 'ends_at' => $this->periodEnd($startsAt, $subscription->billing_interval),
             ]);
 
-            $payment->update([
+            $locked->update([
                 'status' => Payment::STATUS_PAID,
                 'paid_at' => $now,
                 'confirmed_by' => $actor->id,
@@ -222,32 +225,44 @@ class BillingService
                 route('billing.index'),
             );
 
-            return $payment->refresh()->load('subscription.plan');
+            return $locked->refresh()->load('subscription.plan');
         });
     }
 
     public function rejectPayment(Payment $payment, User $actor): Payment
     {
-        $payment->update([
-            'status' => Payment::STATUS_REJECTED,
-            'confirmed_by' => $actor->id,
-        ]);
+        return DB::transaction(function () use ($payment, $actor): Payment {
+            /** @var Payment $locked */
+            $locked = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
-        $payment->subscription?->update(['status' => Subscription::STATUS_CANCELLED]);
+            if (
+                $locked->status === Payment::STATUS_PAID
+                || $locked->status === Payment::STATUS_REJECTED
+            ) {
+                return $locked->refresh();
+            }
 
-        $tenant = $payment->tenant;
+            $locked->update([
+                'status' => Payment::STATUS_REJECTED,
+                'confirmed_by' => $actor->id,
+            ]);
 
-        if ($tenant) {
-            $this->notifyTenantManagers(
-                $tenant,
-                Notification::TYPE_ERROR,
-                'Оплата отклонена',
-                'Платёж не подтверждён. Проверьте реквизиты и повторите оплату.',
-                route('billing.index'),
-            );
-        }
+            $locked->subscription()?->update(['status' => Subscription::STATUS_CANCELLED]);
 
-        return $payment->refresh();
+            $tenant = $locked->tenant;
+
+            if ($tenant) {
+                $this->notifyTenantManagers(
+                    $tenant,
+                    Notification::TYPE_ERROR,
+                    'Оплата отклонена',
+                    'Платёж не подтверждён. Проверьте реквизиты и повторите оплату.',
+                    route('billing.index'),
+                );
+            }
+
+            return $locked->refresh();
+        });
     }
 
     public function processExpiringAndExpired(): int

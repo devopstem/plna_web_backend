@@ -44,18 +44,25 @@ class ImportController extends Controller implements HasMiddleware
 
     public function upload(Request $request): RedirectResponse
     {
+        $maxKb = ProductImportService::MAX_UPLOAD_KB;
+
         $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$maxKb],
         ], [
             'file.required' => 'Выберите CSV-файл.',
             'file.mimes' => 'Допустимы только файлы CSV/TXT.',
-            'file.max' => 'Размер файла не должен превышать 10 МБ.',
+            'file.max' => 'Размер файла не должен превышать '.(int) ($maxKb / 1024).' МБ. Для больших каталогов: php artisan products:import /path/to/file.csv',
         ]);
 
         /** @var UploadedFile $file */
         $file = $request->file('file');
+        $user = Auth::user();
         $tenantId = $this->resolveTenantId();
-        $result = $this->imports->import($file, $tenantId);
+        $result = $this->imports->import(
+            $file,
+            $tenantId,
+            allowGlobalMutation: $user?->isSuperAdmin() === true,
+        );
 
         $message = sprintf(
             'Импорт завершён: создано %d, обновлено %d, ошибок %d.',

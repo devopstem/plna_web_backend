@@ -1,10 +1,10 @@
 {
     "name": "plna_web_backend",
     "private": true,
-    "version": "2.6.0",
+    "version": "2.7.0",
     "type": "module",
     "author": "DevOpsTem <devopstem@gmail.com>",
-    "license": "MIT",
+    "license": "UNLICENSED",
     "scripts": {
         "dev": "vite",
         "build": "vite build",

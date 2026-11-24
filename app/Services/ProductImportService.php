@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Product;
+use App\Support\ProductBarcode;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +24,12 @@ class ProductImportService
         'weight_g',
     ];
 
+    /** Laravel `max:` is kilobytes. 128 MB for large catalog CSVs. */
+    public const MAX_UPLOAD_KB = 131072;
+
+    /** Keep session/UI light even if thousands of rows fail. */
+    public const MAX_ERROR_ROWS = 100;
+
     /**
      * @return array{
      *     created: int,
@@ -31,15 +38,59 @@ class ProductImportService
      *     error_rows: list<array{row: int, barcode: string|null, messages: list<string>}>
      * }
      */
-    public function import(UploadedFile $file, string $tenantId): array
+    public function import(UploadedFile $file, string $tenantId, bool $allowGlobalMutation = false): array
     {
-        $handle = fopen($file->getRealPath(), 'rb');
+        $path = $file->getRealPath();
+
+        if ($path === false) {
+            throw ValidationException::withMessages([
+                'file' => 'Не удалось прочитать файл.',
+            ]);
+        }
+
+        return $this->importPath($path, $tenantId, $allowGlobalMutation);
+    }
+
+    /**
+     * Stream CSV from disk (CLI / large files) — no full-file memory load.
+     *
+     * @return array{
+     *     created: int,
+     *     updated: int,
+     *     errors: int,
+     *     error_rows: list<array{row: int, barcode: string|null, messages: list<string>}>
+     * }
+     */
+    public function importPath(string $path, string $tenantId, bool $allowGlobalMutation = false): array
+    {
+        if (! is_file($path) || ! is_readable($path)) {
+            throw ValidationException::withMessages([
+                'file' => 'Не удалось прочитать файл.',
+            ]);
+        }
+
+        @set_time_limit(0);
+
+        $handle = fopen($path, 'rb');
 
         if ($handle === false) {
             throw ValidationException::withMessages([
                 'file' => 'Не удалось прочитать файл.',
             ]);
         }
+
+        $firstLine = fgets($handle);
+        if ($firstLine === false) {
+            fclose($handle);
+
+            throw ValidationException::withMessages([
+                'file' => 'CSV-файл пуст.',
+            ]);
+        }
+
+        $firstLine = preg_replace('/^\xEF\xBB\xBF/', '', $firstLine) ?? $firstLine;
+        $delimiter = $this->detectDelimiter($firstLine);
+        rewind($handle);
 
         $created = 0;
         $updated = 0;
@@ -49,7 +100,7 @@ class ProductImportService
         $headerValidated = false;
 
         try {
-            while (($row = fgetcsv($handle, 0, ';', '"', '\\')) !== false) {
+            while (($row = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) {
                 $rowNumber++;
 
                 if ($this->isEmptyRow($row)) {
@@ -73,11 +124,13 @@ class ProductImportService
 
                 if ($validator->fails()) {
                     $errors++;
-                    $errorRows[] = [
-                        'row' => $rowNumber,
-                        'barcode' => $parsed['barcode'] !== '' ? $parsed['barcode'] : null,
-                        'messages' => $validator->errors()->all(),
-                    ];
+                    if (count($errorRows) < self::MAX_ERROR_ROWS) {
+                        $errorRows[] = [
+                            'row' => $rowNumber,
+                            'barcode' => $parsed['barcode'] !== '' ? $parsed['barcode'] : null,
+                            'messages' => $validator->errors()->all(),
+                        ];
+                    }
 
                     continue;
                 }
@@ -95,13 +148,30 @@ class ProductImportService
                         && $product->owner_tenant_id !== $tenantId
                     ) {
                         $errors++;
-                        $errorRows[] = [
-                            'row' => $rowNumber,
-                            'barcode' => $attributes['barcode'],
-                            'messages' => [
-                                'Штрихкод занят приватным товаром другого арендатора.',
-                            ],
-                        ];
+                        if (count($errorRows) < self::MAX_ERROR_ROWS) {
+                            $errorRows[] = [
+                                'row' => $rowNumber,
+                                'barcode' => $attributes['barcode'],
+                                'messages' => [
+                                    'Штрихкод занят приватным товаром другого арендатора.',
+                                ],
+                            ];
+                        }
+
+                        continue;
+                    }
+
+                    if ($product->owner_tenant_id === null && ! $allowGlobalMutation) {
+                        $errors++;
+                        if (count($errorRows) < self::MAX_ERROR_ROWS) {
+                            $errorRows[] = [
+                                'row' => $rowNumber,
+                                'barcode' => $attributes['barcode'],
+                                'messages' => [
+                                    'Глобальный товар каталога может изменить только Super Admin.',
+                                ],
+                            ];
+                        }
 
                         continue;
                     }
@@ -110,7 +180,6 @@ class ProductImportService
                         $product->restore();
                     }
 
-                    // Keep ownership: do not re-assign private → global on re-import.
                     $product->update($attributes);
                     $updated++;
 
@@ -119,7 +188,8 @@ class ProductImportService
 
                 Product::query()->create([
                     ...$attributes,
-                    'owner_tenant_id' => null,
+                    // Tenant CSV import creates private SKUs; Super Admin may seed globals.
+                    'owner_tenant_id' => $allowGlobalMutation ? null : $tenantId,
                     'checked' => false,
                 ]);
                 $created++;
@@ -148,6 +218,7 @@ class ProductImportService
             implode(';', self::HEADERS),
             '4810014018641;Квас Старажытны;Квас Белорусский;1500;ПЭТ;80;250;80;1500',
             '4607025392585;Вода негазированная;Вода;1500;ПЭТ;80;280;80;1500',
+            '008421369041;Пример UPC-A 12 цифр;Мягкие игрушки;;Плюш;130;230;110;201',
         ];
 
         return implode("\n", $lines)."\n";
@@ -159,11 +230,11 @@ class ProductImportService
     private function rowRules(): array
     {
         return [
-            'barcode' => ['required', 'string', 'size:13', 'regex:/^\d{13}$/'],
+            'barcode' => ProductBarcode::rules(),
             'name' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:255'],
             'volume_ml' => ['nullable', 'integer', 'min:0'],
-            'package_type' => ['nullable', 'string', 'max:50'],
+            'package_type' => ['nullable', 'string', 'max:255'],
             'width_mm' => ['nullable', 'integer', 'min:0'],
             'height_mm' => ['nullable', 'integer', 'min:0'],
             'depth_mm' => ['nullable', 'integer', 'min:0'],
@@ -177,9 +248,7 @@ class ProductImportService
     private function rowMessages(): array
     {
         return [
-            'barcode.required' => 'Штрихкод обязателен.',
-            'barcode.size' => 'Штрихкод должен содержать 13 цифр.',
-            'barcode.regex' => 'Штрихкод должен состоять из 13 цифр.',
+            ...ProductBarcode::messages(),
             'name.required' => 'Название обязательно.',
             'volume_ml.integer' => 'volume_ml должно быть целым числом.',
             'width_mm.integer' => 'width_mm должно быть целым числом.',
@@ -201,7 +270,7 @@ class ProductImportService
             $values[$header] = isset($row[$index]) ? trim((string) $row[$index]) : '';
         }
 
-        $values['barcode'] = preg_replace('/\s+/', '', $values['barcode']) ?? '';
+        $values['barcode'] = ProductBarcode::normalize($values['barcode']);
 
         foreach (['volume_ml', 'width_mm', 'height_mm', 'depth_mm', 'weight_g'] as $field) {
             if ($values[$field] === '') {
@@ -209,15 +278,22 @@ class ProductImportService
             }
         }
 
-        if ($values['package_type'] === '') {
-            $values['package_type'] = null;
-        }
-
-        if ($values['category'] === '') {
-            $values['category'] = null;
-        }
+        $values['package_type'] = $this->nullableTruncated($values['package_type'], 255);
+        $values['category'] = $this->nullableTruncated($values['category'], 255);
+        $values['name'] = mb_substr($values['name'], 0, 255);
 
         return $values;
+    }
+
+    private function nullableTruncated(string $value, int $max): ?string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        return mb_substr($value, 0, $max);
     }
 
     /**
@@ -241,6 +317,18 @@ class ProductImportService
             'depth_mm' => $validated['depth_mm'] ?? null,
             'weight_g' => $validated['weight_g'] ?? null,
         ];
+    }
+
+    private function detectDelimiter(string $firstLine): string
+    {
+        $semicolon = substr_count($firstLine, ';');
+        $comma = substr_count($firstLine, ',');
+
+        if ($semicolon === 0 && $comma === 0) {
+            return ';';
+        }
+
+        return $semicolon >= $comma ? ';' : ',';
     }
 
     /**

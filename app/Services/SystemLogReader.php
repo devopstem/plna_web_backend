@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\File;
 
 class SystemLogReader
 {
+    /** Cap bytes read from the end of a log file to avoid OOM on huge laravel.log. */
+    private const MAX_READ_BYTES = 2_000_000;
+
     /**
      * @return list<array{id: int, level: string, datetime: string|null, message: string, raw: string}>
      */
@@ -17,7 +20,7 @@ class SystemLogReader
             return [];
         }
 
-        $content = File::get($path);
+        $content = $this->readTail($path);
         if ($content === '') {
             return [];
         }
@@ -62,6 +65,41 @@ class SystemLogReader
         }
 
         File::put($path, '');
+    }
+
+    private function readTail(string $path): string
+    {
+        $size = File::size($path);
+        if ($size === false || $size === 0) {
+            return '';
+        }
+
+        if ($size <= self::MAX_READ_BYTES) {
+            return (string) File::get($path);
+        }
+
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            return '';
+        }
+
+        try {
+            fseek($handle, -self::MAX_READ_BYTES, SEEK_END);
+            $chunk = stream_get_contents($handle);
+            if ($chunk === false || $chunk === '') {
+                return '';
+            }
+
+            // Drop partial first line so parseEntries starts on a real entry boundary.
+            $newline = strpos($chunk, "\n");
+            if ($newline !== false) {
+                $chunk = substr($chunk, $newline + 1);
+            }
+
+            return $chunk;
+        } finally {
+            fclose($handle);
+        }
     }
 
     /**

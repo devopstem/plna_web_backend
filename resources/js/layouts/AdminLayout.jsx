@@ -130,6 +130,13 @@ const navigation = [
         section: 'catalog',
     },
     {
+        name: 'Импорт листа A4',
+        href: '/planograms/sheet-import',
+        icon: ArrowUpTrayIcon,
+        permission: 'view-planograms',
+        section: 'catalog',
+    },
+    {
         name: 'Карта зала',
         href: '/floor-plan',
         icon: MapIcon,

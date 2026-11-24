@@ -4,6 +4,7 @@ includes:
 parameters:
     paths:
         - app
-    # Start at level 1 for a green CI baseline; raise gradually (2+ has 200+ findings today).
+    # Level 1 = green CI baseline (2.7). Raise gradually; level 2+ still has many findings.
+    # Track progress: composer run analyse
     level: 1
     treatPhpDocTypesAsCertain: false

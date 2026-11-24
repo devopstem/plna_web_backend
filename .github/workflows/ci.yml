@@ -1,3 +1,5 @@
+# PLNA Web Backend — continuous integration
+# Gates: Composer/npm audit → migrate → PHPUnit (+Clover/JUnit) → Pint → PHPStan → SonarCloud + Quality Gate
 name: CI
 
 on:
@@ -12,9 +14,9 @@ concurrency:
 
 jobs:
   laravel:
-    name: Laravel (PHP ${{ matrix.php }} · Postgres 15)
+    name: Laravel (PHP ${{ matrix.php }} · Postgres 16)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     strategy:
       fail-fast: true
@@ -23,8 +25,9 @@ jobs:
         php: ['8.4']
 
     services:
+      # Align with docs/SETUP.md (PostgreSQL 16 recommended for local/prod parity).
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_DB: testing
           POSTGRES_USER: postgres
@@ -151,6 +154,9 @@ jobs:
       - name: npm audit (high+)
         run: npm audit --audit-level=high
 
+      - name: Build frontend assets
+        run: npm run build
+
       - name: Wait for PostgreSQL
         run: |
           for i in $(seq 1 30); do
@@ -165,10 +171,12 @@ jobs:
       - name: Run migrations
         run: php artisan migrate --force
 
-      - name: Run tests (with coverage)
+      - name: Run tests (coverage + JUnit)
         run: |
           mkdir -p coverage
-          php artisan test --compact --coverage-clover=coverage/clover.xml
+          php artisan test --compact \
+            --coverage-clover=coverage/clover.xml \
+            --log-junit=coverage/junit.xml
 
       - name: Laravel Pint (style)
         run: ./vendor/bin/pint --test
@@ -176,8 +184,21 @@ jobs:
       - name: Larastan / PHPStan
         run: ./vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
+      - name: Require SonarCloud token
+        run: |
+          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "SONAR_TOKEN secret is missing. Add it in GitHub → Settings → Secrets." >&2
+            exit 1
+          fi
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+
+      - name: SonarCloud Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1.1.0
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

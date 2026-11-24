@@ -6,6 +6,9 @@ use App\Http\Controllers\Concerns\AuthorizesResourcePermissions;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Support\Permissions;
+use App\Support\ProductBarcode;
+use App\Support\ProductCatalogAuthority;
+use App\Support\ProductCatalogSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -33,15 +36,7 @@ class ProductController extends Controller implements HasMiddleware
     public function index(Request $request): JsonResponse
     {
         $products = Product::query()
-            ->when($request->filled('search'), function ($query) use ($request): void {
-                $search = '%'.$request->string('search').'%';
-                $query->where(function ($builder) use ($search): void {
-                    $builder
-                        ->where('name', 'ilike', $search)
-                        ->orWhere('barcode', 'ilike', $search)
-                        ->orWhere('category', 'ilike', $search);
-                });
-            })
+            ->tap(fn ($query) => ProductCatalogSearch::apply($query, $request->string('search')->toString()))
             ->orderBy('name')
             ->paginate(20);
 
@@ -52,15 +47,13 @@ class ProductController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'barcode' => [
-                'required',
-                'string',
-                'size:13',
+                ...ProductBarcode::rules(),
                 Rule::unique('products', 'barcode')->whereNull('deleted_at'),
             ],
             'name' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:255'],
             'volume_ml' => ['nullable', 'integer', 'min:0'],
-            'package_type' => ['nullable', 'string', 'max:50'],
+            'package_type' => ['nullable', 'string', 'max:255'],
             'width_mm' => ['nullable', 'integer', 'min:0'],
             'height_mm' => ['nullable', 'integer', 'min:0'],
             'depth_mm' => ['nullable', 'integer', 'min:0'],
@@ -73,16 +66,10 @@ class ProductController extends Controller implements HasMiddleware
         $isPrivate = (bool) ($validated['is_private'] ?? false);
         unset($validated['is_private']);
 
-        $ownerTenantId = null;
-        if ($isPrivate) {
-            abort_unless($user?->tenant_id, 422, 'Приватный товар доступен только пользователю арендатора.');
-            $ownerTenantId = $user->tenant_id;
-        }
-
         $product = Product::query()->create([
             ...$validated,
             'checked' => (bool) ($validated['checked'] ?? false),
-            'owner_tenant_id' => $ownerTenantId,
+            'owner_tenant_id' => ProductCatalogAuthority::resolveOwnerTenantIdForCreate($user, $isPrivate),
         ]);
 
         return response()->json($product, Response::HTTP_CREATED);
@@ -95,19 +82,19 @@ class ProductController extends Controller implements HasMiddleware
 
     public function update(Request $request, Product $product): JsonResponse
     {
+        ProductCatalogAuthority::assertCanMutate($product, $request->user());
+
         $validated = $request->validate([
             'barcode' => [
-                'sometimes',
-                'string',
-                'size:13',
+                ...ProductBarcode::rules(required: false),
                 Rule::unique('products', 'barcode')
                     ->whereNull('deleted_at')
                     ->ignore($product->id),
             ],
             'name' => ['sometimes', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:255'],
             'volume_ml' => ['nullable', 'integer', 'min:0'],
-            'package_type' => ['nullable', 'string', 'max:50'],
+            'package_type' => ['nullable', 'string', 'max:255'],
             'width_mm' => ['nullable', 'integer', 'min:0'],
             'height_mm' => ['nullable', 'integer', 'min:0'],
             'depth_mm' => ['nullable', 'integer', 'min:0'],
@@ -126,11 +113,7 @@ class ProductController extends Controller implements HasMiddleware
 
     public function destroy(Request $request, Product $product): JsonResponse
     {
-        $user = $request->user();
-
-        if ($product->isGlobal() && ! $user?->isSuperAdmin()) {
-            abort(403, 'Глобальный товар каталога может удалить только Super Admin.');
-        }
+        ProductCatalogAuthority::assertCanMutate($product, $request->user(), 'удалить');
 
         $product->delete();
 

@@ -9,6 +9,9 @@ use App\Http\Requests\ProductRequest;
 use App\Models\Product;
 use App\Services\OpenFoodFactsService;
 use App\Support\Permissions;
+use App\Support\ProductBarcode;
+use App\Support\ProductCatalogAuthority;
+use App\Support\ProductCatalogSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +39,7 @@ class ProductController extends Controller implements HasMiddleware
                 Permissions::DELETE_PRODUCTS,
             ),
             new Middleware('permission:'.Permissions::CREATE_PRODUCTS, only: ['lookupBarcode']),
+            new Middleware('permission:'.Permissions::VIEW_PRODUCTS, only: ['search']),
             new Middleware('permission:'.Permissions::EDIT_PRODUCTS, only: ['approveUnchecked', 'approve']),
         ];
     }
@@ -52,42 +56,50 @@ class ProductController extends Controller implements HasMiddleware
         $products = Product::query()
             ->when($trashed, fn ($query) => $query->onlyTrashed())
             ->when($uncheckedOnly && ! $trashed, fn ($query) => $query->where('checked', false))
-            ->when($request->filled('category'), fn ($query) => $query->where('category', $request->string('category')))
-            ->when($request->filled('search'), function ($query) use ($request): void {
-                $search = '%'.$request->string('search').'%';
-
-                $query->where(function ($builder) use ($search): void {
-                    $builder
-                        ->where('name', 'ilike', $search)
-                        ->orWhere('barcode', 'ilike', $search)
-                        ->orWhere('category', 'ilike', $search)
-                        ->orWhere('package_type', 'ilike', $search);
-                });
-            })
-            ->latest()
+            ->tap(fn ($query) => ProductCatalogSearch::apply($query, $request->string('search')->toString()))
+            ->latest('updated_at')
             ->paginate(15)
             ->withQueryString()
             ->through(fn (Product $product) => $this->transformProduct($product));
 
-        $categories = Product::query()
-            ->select('category')
-            ->distinct()
-            ->orderBy('category')
-            ->pluck('category')
-            ->values();
-
         return Inertia::render('Products/Index', [
             'products' => $products,
-            'categories' => $categories,
             'filters' => [
                 'search' => $request->string('search')->toString(),
-                'category' => $request->string('category')->toString(),
                 'trashed' => $trashed,
                 'unchecked' => $uncheckedOnly,
             ],
             'trashedCount' => Product::onlyTrashed()->count(),
             'uncheckedCount' => Product::query()->where('checked', false)->count(),
         ]);
+    }
+
+    /**
+     * Lightweight live suggestions for the products page (and similar UIs).
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['required', 'string', 'min:1', 'max:100'],
+        ]);
+
+        $term = trim($validated['q']);
+
+        $items = Product::query()
+            ->tap(fn ($query) => ProductCatalogSearch::apply($query, $term))
+            ->orderBy('name')
+            ->limit(8)
+            ->get(['id', 'barcode', 'name', 'width_mm'])
+            ->map(static fn (Product $product): array => [
+                'id' => $product->id,
+                'barcode' => $product->barcode,
+                'name' => $product->name,
+                'width_mm' => $product->width_mm,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $items]);
     }
 
     public function create(): Response
@@ -98,17 +110,15 @@ class ProductController extends Controller implements HasMiddleware
     public function lookupBarcode(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'barcode' => ['required', 'string', 'regex:/^\d{8,14}$/'],
-        ], [
-            'barcode.required' => 'Укажите штрихкод.',
-            'barcode.regex' => 'Штрихкод должен содержать от 8 до 14 цифр.',
-        ]);
+            'barcode' => ProductBarcode::rules(),
+        ], ProductBarcode::messages());
 
-        $barcode = preg_replace('/\D+/', '', $validated['barcode']) ?? '';
+        $barcode = ProductBarcode::normalize($validated['barcode']);
 
-        if (strlen($barcode) === 13 && ! preg_match('/^\d{13}$/', $barcode)) {
+        if (! ProductBarcode::isValid($barcode)) {
             throw ValidationException::withMessages([
-                'barcode' => 'Штрихкод EAN-13 должен состоять из 13 цифр.',
+                'barcode' => 'Штрихкод должен состоять из '
+                    .ProductBarcode::MIN_LENGTH.'–'.ProductBarcode::MAX_LENGTH.' цифр.',
             ]);
         }
 
@@ -164,6 +174,12 @@ class ProductController extends Controller implements HasMiddleware
     public function update(ProductRequest $request, string $product): RedirectResponse
     {
         $model = Product::query()->findOrFail($product);
+        $reason = ProductCatalogAuthority::denyReason($model, Auth::user());
+
+        if ($reason !== null) {
+            return back()->with('error', $reason);
+        }
+
         $model->update($request->productAttributes());
 
         return redirect()
@@ -174,22 +190,10 @@ class ProductController extends Controller implements HasMiddleware
     public function destroy(string $product): RedirectResponse
     {
         $model = Product::query()->findOrFail($product);
-        $user = Auth::user();
+        $reason = ProductCatalogAuthority::denyReason($model, Auth::user(), 'удалить');
 
-        if ($model->isGlobal() && ! $user?->isSuperAdmin()) {
-            return back()->with(
-                'error',
-                'Глобальный товар каталога может удалить только Super Admin.',
-            );
-        }
-
-        if (
-            $model->owner_tenant_id
-            && $user
-            && ! $user->isSuperAdmin()
-            && $model->owner_tenant_id !== $user->tenant_id
-        ) {
-            return back()->with('error', 'Нельзя удалить чужой приватный товар.');
+        if ($reason !== null) {
+            return back()->with('error', $reason);
         }
 
         $model->delete();
@@ -202,6 +206,12 @@ class ProductController extends Controller implements HasMiddleware
     public function restore(string $id): RedirectResponse
     {
         $product = Product::onlyTrashed()->findOrFail($id);
+        $reason = ProductCatalogAuthority::denyReason($product, Auth::user(), 'восстановить');
+
+        if ($reason !== null) {
+            return back()->with('error', $reason);
+        }
+
         $product->restore();
 
         return redirect()
@@ -212,13 +222,10 @@ class ProductController extends Controller implements HasMiddleware
     public function forceDelete(string $id): RedirectResponse
     {
         $product = Product::onlyTrashed()->findOrFail($id);
-        $user = Auth::user();
+        $reason = ProductCatalogAuthority::denyReason($product, Auth::user(), 'удалить');
 
-        if ($product->isGlobal() && ! $user?->isSuperAdmin()) {
-            return back()->with(
-                'error',
-                'Глобальный товар каталога может удалить только Super Admin.',
-            );
+        if ($reason !== null) {
+            return back()->with('error', $reason);
         }
 
         $product->forceDelete();
@@ -230,9 +237,17 @@ class ProductController extends Controller implements HasMiddleware
 
     public function approveUnchecked(): RedirectResponse
     {
-        $updated = Product::query()
-            ->where('checked', false)
-            ->update(['checked' => true]);
+        $user = Auth::user();
+
+        $query = Product::query()->where('checked', false);
+
+        // Tenant actors may only approve their private SKUs — not shared globals.
+        if ($user && ! $user->isSuperAdmin()) {
+            abort_unless($user->tenant_id !== null, 403);
+            $query->where('owner_tenant_id', $user->tenant_id);
+        }
+
+        $updated = $query->update(['checked' => true]);
 
         if ($updated === 0) {
             return redirect()
@@ -248,6 +263,11 @@ class ProductController extends Controller implements HasMiddleware
     public function approve(string $product): RedirectResponse
     {
         $model = Product::query()->findOrFail($product);
+        $reason = ProductCatalogAuthority::denyReason($model, Auth::user());
+
+        if ($reason !== null) {
+            return back()->with('error', $reason);
+        }
 
         if (! $model->checked) {
             $model->update(['checked' => true]);
@@ -290,19 +310,9 @@ class ProductController extends Controller implements HasMiddleware
 
     private function resolveOwnerTenantId(ProductRequest $request): ?string
     {
-        if (! $request->wantsPrivate()) {
-            return null;
-        }
-
-        $user = $request->user();
-
-        if ($user?->tenant_id) {
-            return $user->tenant_id;
-        }
-
-        abort_unless($user?->isSuperAdmin() === true, 403, 'Нельзя создать приватный товар без арендатора.');
-
-        // Super Admin without tenant context cannot mark as private without an owner.
-        abort(422, 'Для приватного товара войдите под арендатором или укажите владельца.');
+        return ProductCatalogAuthority::resolveOwnerTenantIdForCreate(
+            $request->user(),
+            $request->wantsPrivate(),
+        );
     }
 }

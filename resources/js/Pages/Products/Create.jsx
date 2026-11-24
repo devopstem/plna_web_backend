@@ -57,7 +57,7 @@ export default function Create() {
     const { data, setData, post, processing, errors, transform, reset } =
         useForm(buildProductFormData());
 
-    const canCheck = useMemo(() => /^\d{13}$/.test(barcode), [barcode]);
+    const canCheck = useMemo(() => /^\d{1,14}$/.test(barcode), [barcode]);
 
     const goBackToBarcode = () => {
         setStep(1);
@@ -72,15 +72,15 @@ export default function Create() {
     const checkBarcode = async (event) => {
         event.preventDefault();
 
-        const value = barcode.replace(/\D/g, '').slice(0, 13);
+        const value = barcode.replace(/\D/g, '').slice(0, 14);
         setBarcode(value);
         setExisting(null);
         setOffSuggestion(null);
         setShowManualForm(false);
         setBarcodeError('');
 
-        if (!/^\d{13}$/.test(value)) {
-            setBarcodeError('Штрихкод должен состоять из 13 цифр.');
+        if (!/^\d{1,14}$/.test(value)) {
+            setBarcodeError('Штрихкод: только цифры, максимум 14.');
             return;
         }
 
@@ -234,7 +234,7 @@ export default function Create() {
                             htmlFor="lookup_barcode"
                             className="block text-sm font-medium text-slate-200"
                         >
-                            Штрихкод (EAN-13){' '}
+                            Штрихкод (до 14 цифр){' '}
                             <span className="text-red-400">*</span>
                         </label>
                         <div className="mt-1 flex flex-col gap-3 sm:flex-row">
@@ -242,14 +242,14 @@ export default function Create() {
                                 id="lookup_barcode"
                                 type="text"
                                 inputMode="numeric"
-                                maxLength={13}
+                                maxLength={14}
                                 value={barcode}
                                 autoFocus
                                 onChange={(e) => {
                                     setBarcode(
                                         e.target.value
                                             .replace(/\D/g, '')
-                                            .slice(0, 13),
+                                            .slice(0, 14),
                                     );
                                     setExisting(null);
                                     setBarcodeError('');
@@ -275,7 +275,7 @@ export default function Create() {
                             </p>
                         )}
                         <p className="mt-1.5 text-xs text-slate-500">
-                            Нужно ровно 13 цифр. Сейчас: {barcode.length}/13
+                            Только цифры, максимум 14. Сейчас: {barcode.length}/14
                         </p>
                     </div>
 

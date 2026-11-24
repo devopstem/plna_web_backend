@@ -15,7 +15,7 @@ server {
     root __APP_DIR__/public;
     index index.php;
 
-    client_max_body_size 64M;
+    client_max_body_size 128M;
 
     # --- compression ---
     gzip on;

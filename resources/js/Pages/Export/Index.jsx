@@ -243,7 +243,7 @@ export default function Index({
                 onSuccess: (page) => {
                     const msg =
                         page?.props?.flash?.success ||
-                        'Магазин и каталог синхронизированы с Firebase';
+                        'Синхронизация поставлена в очередь';
                     fireToast('success', msg);
                 },
                 onError: (errors) => {
@@ -281,7 +281,7 @@ export default function Index({
                 onSuccess: (page) => {
                     const msg =
                         page?.props?.flash?.success ||
-                        'Каталог синхронизирован с Firebase';
+                        'Синхронизация каталога поставлена в очередь';
                     fireToast('success', msg);
                 },
                 onError: (errors) => {

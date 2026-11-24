@@ -4,7 +4,7 @@
     "type": "project",
     "description": "PLNA Web Backend — multi-tenant planogram management (Laravel + Inertia/React).",
     "keywords": ["planogram", "laravel", "inertia", "firebase", "retail"],
-    "license": "MIT",
+    "license": "proprietary",
     "authors": [
         {
             "name": "DevOpsTem",

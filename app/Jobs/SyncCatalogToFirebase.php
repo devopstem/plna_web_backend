@@ -19,6 +19,8 @@ class SyncCatalogToFirebase implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 3;
 
+    public int $timeout = 300;
+
     /** @var list<int> */
     public array $backoff = [300];
 

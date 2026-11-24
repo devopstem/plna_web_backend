@@ -47,8 +47,8 @@ export function validateProductForm(data) {
     const barcode = String(data.barcode || '').trim();
     if (!barcode) {
         errors.barcode = 'Укажите штрихкод.';
-    } else if (!/^\d{13}$/.test(barcode)) {
-        errors.barcode = 'Штрихкод должен состоять из 13 цифр.';
+    } else if (!/^\d{1,14}$/.test(barcode)) {
+        errors.barcode = 'Штрихкод: только цифры, максимум 14.';
     }
 
     if (!String(data.name || '').trim()) {
@@ -105,19 +105,19 @@ export default function ProductForm({
                             htmlFor="barcode"
                             className="block text-sm font-medium text-slate-200"
                         >
-                            Штрихкод (EAN-13) <span className="text-red-400">*</span>
+                            Штрихкод (до 14 цифр) <span className="text-red-400">*</span>
                         </label>
                         <input
                             id="barcode"
                             type="text"
                             inputMode="numeric"
-                            maxLength={13}
+                            maxLength={14}
                             value={data.barcode}
                             readOnly={barcodeLocked}
                             onChange={(e) =>
                                 setData(
                                     'barcode',
-                                    e.target.value.replace(/\D/g, '').slice(0, 13),
+                                    e.target.value.replace(/\D/g, '').slice(0, 14),
                                 )
                             }
                             className={`${inputClass(err('barcode'))}${

@@ -8,7 +8,8 @@ import {
     PlusIcon,
     TrashIcon,
 } from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
+import axios from 'axios';
+import { useEffect, useRef, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { useCan } from '@/lib/permissions';
 import { fireConfirm, fireError, fireSuccess } from '@/lib/swal';
@@ -16,7 +17,6 @@ import clsx from 'clsx';
 
 export default function Index({
     products,
-    categories = [],
     filters,
     trashedCount = 0,
     uncheckedCount = 0,
@@ -27,7 +27,11 @@ export default function Index({
     const canEdit = can('edit-products');
     const canDelete = can('delete-products');
     const [search, setSearch] = useState(filters.search || '');
-    const [category, setCategory] = useState(filters.category || '');
+    const [suggestions, setSuggestions] = useState([]);
+    const [suggestOpen, setSuggestOpen] = useState(false);
+    const [suggestLoading, setSuggestLoading] = useState(false);
+    const searchWrapRef = useRef(null);
+    const suggestAbortRef = useRef(null);
     const trashed = Boolean(filters.trashed);
     const uncheckedOnly = Boolean(filters.unchecked);
 
@@ -40,18 +44,97 @@ export default function Index({
         }
     }, [flash]);
 
+    useEffect(() => {
+        setSearch(filters.search || '');
+    }, [filters.search]);
+
+    useEffect(() => {
+        const onDocClick = (event) => {
+            if (!searchWrapRef.current?.contains(event.target)) {
+                setSuggestOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', onDocClick);
+        return () => document.removeEventListener('mousedown', onDocClick);
+    }, []);
+
+    // Live suggestions (lightweight JSON).
+    useEffect(() => {
+        const q = search.trim();
+
+        if (q.length < 2) {
+            setSuggestions([]);
+            setSuggestLoading(false);
+            if (suggestAbortRef.current) {
+                suggestAbortRef.current.abort();
+            }
+            return undefined;
+        }
+
+        const timer = window.setTimeout(async () => {
+            if (suggestAbortRef.current) {
+                suggestAbortRef.current.abort();
+            }
+
+            const controller = new AbortController();
+            suggestAbortRef.current = controller;
+            setSuggestLoading(true);
+
+            try {
+                const { data } = await axios.get(route('products.search'), {
+                    params: { q },
+                    signal: controller.signal,
+                });
+                setSuggestions(Array.isArray(data?.data) ? data.data : []);
+                setSuggestOpen(true);
+            } catch (err) {
+                if (err?.code === 'ERR_CANCELED') {
+                    return;
+                }
+                setSuggestions([]);
+            } finally {
+                setSuggestLoading(false);
+            }
+        }, 250);
+
+        return () => window.clearTimeout(timer);
+    }, [search]);
+
+    // Debounced table reload (Inertia) — only name/barcode search.
+    useEffect(() => {
+        const q = search.trim();
+        const current = (filters.search || '').trim();
+
+        if (q === current) {
+            return undefined;
+        }
+
+        // Empty clears filter; otherwise wait for 2+ chars.
+        if (q !== '' && q.length < 2) {
+            return undefined;
+        }
+
+        const timer = window.setTimeout(() => {
+            applyFilters({ search: q || undefined });
+        }, 350);
+
+        return () => window.clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
     const applyFilters = (overrides = {}) => {
         router.get(
             route('products.index'),
             {
-                search: search || undefined,
-                category: category || undefined,
+                search: search.trim() || undefined,
                 trashed: trashed ? 1 : undefined,
                 unchecked: uncheckedOnly ? 1 : undefined,
                 ...overrides,
             },
             {
                 preserveState: true,
+                preserveScroll: true,
                 replace: true,
             },
         );
@@ -59,15 +142,21 @@ export default function Index({
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
-        applyFilters({ search: search || undefined });
+        setSuggestOpen(false);
+        applyFilters({ search: search.trim() || undefined });
+    };
+
+    const pickSuggestion = (product) => {
+        setSearch(product.barcode || product.name || '');
+        setSuggestOpen(false);
+        applyFilters({ search: product.barcode || product.name || undefined });
     };
 
     const switchTab = (toTrashed) => {
         applyFilters({
             trashed: toTrashed ? 1 : undefined,
             unchecked: toTrashed ? undefined : uncheckedOnly ? 1 : undefined,
-            search: search || undefined,
-            category: category || undefined,
+            search: search.trim() || undefined,
         });
     };
 
@@ -285,90 +374,100 @@ export default function Index({
                 ) : null}
 
                 <div className="rounded-xl bg-[#152033] p-4 shadow-sm ring-1 ring-slate-800">
-                    <div className="grid gap-3 md:grid-cols-3 md:items-end">
-                        <form onSubmit={handleSearchSubmit} className="md:col-span-2">
-                            <label
-                                htmlFor="search"
-                                className="mb-1 block text-sm font-medium text-slate-200"
-                            >
-                                Поиск
-                            </label>
-                            <div className="relative">
-                                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    id="search"
-                                    type="search"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Название, штрихкод, категория…"
-                                    className="block w-full rounded-lg border-slate-700 py-2 pl-10 pr-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                />
-                            </div>
-                        </form>
-
-                        <div>
-                            <label
-                                htmlFor="category"
-                                className="mb-1 block text-sm font-medium text-slate-200"
-                            >
-                                Категория
-                            </label>
-                            <select
-                                id="category"
-                                value={category}
-                                onChange={(e) => {
-                                    setCategory(e.target.value);
-                                    applyFilters({
-                                        category: e.target.value || undefined,
-                                    });
-                                }}
-                                className="block w-full rounded-lg border-slate-700 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            >
-                                <option value="">Все категории</option>
-                                {categories.map((item) => (
-                                    <option key={item} value={item}>
-                                        {item}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="mt-3">
-                        <button
-                            type="button"
-                            onClick={() => applyFilters()}
-                            className="rounded-lg border border-slate-700 bg-[#152033] px-4 py-2 text-sm font-medium text-slate-200 shadow-sm hover:bg-slate-800"
+                    <form
+                        ref={searchWrapRef}
+                        onSubmit={handleSearchSubmit}
+                        className="relative max-w-2xl"
+                    >
+                        <label
+                            htmlFor="search"
+                            className="mb-1 block text-sm font-medium text-slate-200"
                         >
-                            Найти
-                        </button>
-                    </div>
+                            Живой поиск
+                        </label>
+                        <div className="relative">
+                            <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                            <input
+                                id="search"
+                                type="search"
+                                value={search}
+                                onChange={(e) => {
+                                    setSearch(e.target.value);
+                                    setSuggestOpen(true);
+                                }}
+                                onFocus={() => {
+                                    if (suggestions.length > 0) {
+                                        setSuggestOpen(true);
+                                    }
+                                }}
+                                placeholder="Начните вводить название или штрихкод…"
+                                autoComplete="off"
+                                className="block w-full rounded-lg border-slate-700 py-2.5 pl-10 pr-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <p className="mt-1.5 text-xs text-slate-500">
+                            От 2 символов — подсказки и фильтр таблицы. Цифры
+                            ищут по штрихкоду быстрее.
+                        </p>
+
+                        {suggestOpen && search.trim().length >= 2 && (
+                            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-700 bg-[#0f172a] py-1 shadow-xl">
+                                {suggestLoading && (
+                                    <p className="px-3 py-2 text-sm text-slate-400">
+                                        Поиск…
+                                    </p>
+                                )}
+                                {!suggestLoading &&
+                                    suggestions.length === 0 && (
+                                        <p className="px-3 py-2 text-sm text-slate-400">
+                                            Ничего не найдено
+                                        </p>
+                                    )}
+                                {!suggestLoading &&
+                                    suggestions.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => pickSuggestion(item)}
+                                            className="flex w-full flex-col px-3 py-2 text-left hover:bg-indigo-500/15"
+                                        >
+                                            <span className="truncate text-sm font-medium text-white">
+                                                {item.name}
+                                            </span>
+                                            <span className="font-mono text-xs text-slate-400">
+                                                {item.barcode}
+                                                {item.width_mm
+                                                    ? ` · ${item.width_mm} мм`
+                                                    : ''}
+                                            </span>
+                                        </button>
+                                    ))}
+                            </div>
+                        )}
+                    </form>
                 </div>
 
                 <div className="overflow-hidden rounded-xl bg-[#152033] shadow-sm ring-1 ring-slate-800">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="min-w-full table-fixed divide-y divide-slate-800">
                             <thead className="bg-[#1a2740]">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    <th className="w-[9rem] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Штрихкод
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Название
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                                        Категория
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    <th className="w-[5.5rem] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Объём
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    <th className="w-[8.5rem] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Упаковка
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    <th className="w-[7.5rem] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Статус
                                     </th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                    <th className="w-[9rem] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">
                                         Действия
                                     </th>
                                 </tr>
@@ -377,7 +476,7 @@ export default function Index({
                                 {products.data.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={7}
+                                            colSpan={6}
                                             className="px-4 py-10 text-center text-sm text-slate-400"
                                         >
                                             {trashed
@@ -394,30 +493,37 @@ export default function Index({
                                             <td className="whitespace-nowrap px-4 py-3 font-mono text-sm text-slate-200">
                                                 {product.barcode}
                                             </td>
-                                            <td className="px-4 py-3 text-sm font-medium text-white">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span>{product.name}</span>
+                                            <td className="max-w-0 px-4 py-3 text-sm font-medium text-white">
+                                                <div className="flex min-w-0 items-center gap-2">
+                                                    <span
+                                                        className="min-w-0 truncate"
+                                                        title={product.name || ''}
+                                                    >
+                                                        {product.name}
+                                                    </span>
                                                     {product.is_private ? (
-                                                        <span className="inline-flex items-center rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300 ring-1 ring-inset ring-violet-400/30">
-                                                            Свой бренд
+                                                        <span className="shrink-0 inline-flex items-center rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-300 ring-1 ring-inset ring-violet-400/30">
+                                                            Свой
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-inset ring-sky-400/25">
-                                                            Глобальный
+                                                        <span className="shrink-0 inline-flex items-center rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300 ring-1 ring-inset ring-sky-400/25">
+                                                            Глоб.
                                                         </span>
                                                     )}
                                                 </div>
-                                            </td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">
-                                                {product.category}
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">
                                                 {product.volume_ml
                                                     ? `${product.volume_ml} мл`
                                                     : '—'}
                                             </td>
-                                            <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">
-                                                {product.package_type || '—'}
+                                            <td className="max-w-0 px-4 py-3 text-sm text-slate-300">
+                                                <span
+                                                    className="block truncate"
+                                                    title={product.package_type || ''}
+                                                >
+                                                    {product.package_type || '—'}
+                                                </span>
                                             </td>
                                             <td className="whitespace-nowrap px-4 py-3 text-sm">
                                                 <span
