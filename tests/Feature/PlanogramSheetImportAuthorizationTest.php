@@ -32,8 +32,13 @@ class PlanogramSheetImportAuthorizationTest extends TestCase
             $this->markTestSkipped('PostgreSQL testing database is not available.');
         }
 
+        // Prefer Artisan::call over $this->seed() / RefreshDatabase — those need Mockery.
         Artisan::call('migrate:fresh', ['--force' => true]);
-        $this->seed(RolesAndPermissionsSeeder::class);
+        Artisan::call('db:seed', [
+            '--class' => RolesAndPermissionsSeeder::class,
+            '--force' => true,
+            '--no-interaction' => true,
+        ]);
     }
 
     public function test_tenant_cannot_view_other_tenant_sheet_import(): void
